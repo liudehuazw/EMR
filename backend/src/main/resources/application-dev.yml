@@ -1,0 +1,61 @@
+# Development profile - using H2 in-memory database
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+spring:
+  application:
+    name: electronic-medical-record
+
+  datasource:
+    driver-class-name: org.h2.Driver
+    url: jdbc:h2:mem:emr_db;DB_CLOSE_DELAY=-1;MODE=MySQL;DATABASE_TO_LOWER=TRUE
+    username: sa
+    password:
+
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema-h2.sql
+      data-locations: classpath:data-h2.sql
+
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 100MB
+
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# JWT config
+jwt:
+  secret: emr-secret-key-2024
+  expiration: 86400000
+
+# File upload config
+file:
+  upload-path: ./uploads/
+  max-size: 52428800
+
+# OCR service config
+ocr:
+  service:
+    url: http://localhost:8000
+    timeout: 30000
