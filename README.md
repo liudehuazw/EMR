@@ -6,6 +6,9 @@
 
 这是一个现代化的家庭医疗记录管理网站，支持患者档案管理、病历统计、检验报告、影像报告和发票统计等功能。系统支持多种格式的文件上传，并能自动解析提取关键数据。
 
+注：目前仅为项目原型。
+
+
 **当前部署地址**：https://your-domain.com
 
 ## 系统架构
@@ -209,9 +212,9 @@ chmod +x deploy-update.sh
 7. 更新 systemctl 服务配置
 8. 启动后端并验证
 
-**域名配置**：通过宝塔面板配置反向代理，注意检查 `server_name` 不带端口号（宝塔新版 bug）
+**域名配置**：通过宝塔面板配置反向代理，注意检查 `server_name` 不带端口号
 
-**OSS 配置**：Endpoint 需要与 bucket 所在地域一致（当前为杭州）
+**OSS 配置**：Endpoint 需要与 bucket 所在地域一致
 
 详细部署过程请参考 `DEVELOPMENT_LOG.md`
 
@@ -303,23 +306,6 @@ aliyun:
     access-key-secret: ${ALIYUN_OSS_ACCESS_KEY_SECRET}
     bucket-name: ${ALIYUN_OSS_BUCKET_NAME}
 ```
-
-## 开发进度
-
-- [x] 项目基础架构搭建
-- [x] 用户认证系统
-- [x] 前端基础页面（单文件 HTML，已迁移）
-- [x] **前端重构为 Vue 3 + Vite SFC（2026-04-23 完成）**
-- [x] 文件上传功能（OSS）
-- [x] PDF/图片解析（OCR）
-- [x] 患者档案管理（前端完整功能）
-- [x] 病历统计功能
-- [x] 检验报告管理
-- [x] 影像报告管理
-- [x] 发票统计功能
-- [x] 头像上传裁剪
-- [x] 演示模式
-- [x] 服务器部署
 
 ## 许可证
 
