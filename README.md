@@ -188,6 +188,14 @@ docker run -p 8000:8000 emr-ocr
 - 管理员账户：`admin` / `admin`（数据持久化）
 - 演示账户：`user` / `user`（数据不保存，刷新即清空）
 
+### 以下为演示页面 ###
+
+<img width="2560" height="1239" alt="ScreenShot_2026-05-23_1411_694" src="https://github.com/user-attachments/assets/1c55e40c-49d6-4de2-9ef1-2aaef2f1e4fb" />
+<img width="2560" height="1239" alt="ScreenShot_2026-05-23_141344_472" src="https://github.com/user-attachments/assets/f44a1ece-ad32-43c8-9580-6da3fead433e" />
+<img width="2560" height="1239" alt="ScreenShot_2026-05-23_141543_786" src="https://github.com/user-attachments/assets/5002927f-c1ec-416d-9331-7c3e9804720e" />
+<img width="2560" height="1239" alt="ScreenShot_2026-05-23_141944_527" src="https://github.com/user-attachments/assets/102bbd52-4ccd-48e2-90b8-de4ddc0210fe" />
+<img width="2560" height="1239" alt="ScreenShot_2026-05-23_142035_314" src="https://github.com/user-attachments/assets/c5ac1635-e5d8-4899-aba8-bb7ce4d5e4f3" />
+
 ## 部署说明
 
 ### 服务器部署
