@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "emr",
+  "compatibility_date": "2026-05-26",
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    "directory": "frontend-vite"
+  },
+  "compatibility_flags": [
+    "nodejs_compat"
+  ]
+}
