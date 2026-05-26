@@ -246,3 +246,9 @@ logs/
 
 # Docker 镜像缓存
 .dockerignore_local
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+!.env.example
