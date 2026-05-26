@@ -45,6 +45,16 @@ export default defineConfig({
           'vendor-element': ['element-plus']
         }
       }
+      external: ['/pic/AIGLM.png'],
+      onwarn(warning, warn) {
+        // 只忽略特定的图片导入错误，其他警告正常显示
+        if (
+          warning.code === 'UNRESOLVED_IMPORT' &&
+          warning.source === '/pic/AIGLM.png'
+        ) {
+          return; // 跳过这个警告，不终止构建
+        }
+        warn(warning); // 其他警告正常处理
     }
   }
 });
