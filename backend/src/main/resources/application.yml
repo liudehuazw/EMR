@@ -1,0 +1,66 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+spring:
+  application:
+    name: electronic-medical-record
+  
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/emr_db?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai}
+    username: ${SPRING_DATASOURCE_USERNAME:root}
+    password: ${SPRING_DATASOURCE_PASSWORD:your_password_here}
+    
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 100MB
+
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+  mapper-locations: classpath*:mapper/*.xml
+
+# JWT配置
+jwt:
+  secret: emr-secret-key-2024-medical-record-system
+  expiration: 86400000 # 24小时
+
+# 文件上传配置
+file:
+  upload-path: ./uploads/
+  max-size: 52428800 # 50MB
+
+# OCR服务配置
+ocr:
+  service:
+    url: http://localhost:8000
+    timeout: 300000 # 5分钟超时（处理多页PDF）
+
+# 智谱AI配置
+zhipu:
+  ai:
+    api-key: ${ZHIPU_API_KEY:your_zhipu_api_key_here}
+    api-url: https://open.bigmodel.cn/api/paas/v4/chat/completions
+    model: glm-4-flash
+    timeout: 60000
+
+# 阿里云OSS配置
+aliyun:
+  oss:
+    endpoint: oss-cn-hangzhou.aliyuncs.com
+    access-key-id: ${ALIYUN_OSS_ACCESS_KEY_ID:your_access_key_id_here}
+    access-key-secret: ${ALIYUN_OSS_ACCESS_KEY_SECRET:your_access_key_secret_here}
+    bucket-name: ${ALIYUN_OSS_BUCKET_NAME:your_bucket_name_here}
