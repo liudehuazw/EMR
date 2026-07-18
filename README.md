@@ -225,7 +225,6 @@ chmod +x deploy-update.sh
 
 **OSS 配置**：Endpoint 需要与 bucket 所在地域一致
 
-详细部署过程请参考 `DEVELOPMENT_LOG.md`
 
 ## 项目结构
 

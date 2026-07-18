@@ -45,7 +45,7 @@ Nginx :8088（宝塔面板管理）
 | 数据库 | MySQL 8.0 |
 | OCR | PaddleOCR 2.7.3（Docker） |
 | 文件存储 | 阿里云 OSS |
-| AI分析 | 智谱 GLM-4-Flash 或 任何其他免费大模型api
+| AI分析 | 智谱 GLM-4.7-Flash 或 任何其他免费大模型api
 | Web服务器 | Nginx（宝塔面板） |
 
 ---
@@ -149,7 +149,7 @@ JWT_SECRET=your-custom-jwt-secret-key-here
 # 文件上传路径
 FILE_UPLOAD_PATH=/opt/emr/uploads
 
-# 智谱AI（从 https://open.bigmodel.cn 获取）
+# 智谱AI（从 https://open.bigmodel.cn 获取） + 也可以修改为其他服务商
 ZHIPU_API_KEY=your_zhipu_api_key
 
 # 阿里云OSS（从阿里云控制台获取）

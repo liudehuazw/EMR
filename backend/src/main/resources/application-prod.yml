@@ -51,7 +51,7 @@ zhipu:
   ai:
     api-key: ${ZHIPU_API_KEY}
     api-url: https://open.bigmodel.cn/api/paas/v4/chat/completions
-    model: glm-4-flash
+    model: glm-4.7-flash
     timeout: 60000
 
 # Alibaba Cloud OSS configuration
