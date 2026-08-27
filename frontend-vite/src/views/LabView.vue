@@ -5,19 +5,14 @@
         <h2 style="margin:0; display:flex; align-items:center; gap:8px;"><AppIcon name="lab" :size="22" style="color:#0074fc;" /> 检验报告管理</h2>
       </div>
 
-      <!-- 患者 Tab 切换 -->
-      <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:1.2rem; padding-bottom:12px; border-bottom:2px solid #eee;">
-        <div
-          v-for="p in patientsStore.patients" :key="'lab-tab-' + p.id"
-          @click="switchPatient(p.id)"
-          :style="tabStyle(p.id)"
-        >
-          {{ p.name }}
-          <span v-if="labStore.getPatientReports(p.id).length > 0" style="font-size:11px; opacity:0.8; margin-left:3px;">
-            ({{ labStore.getPatientReports(p.id).length }})
-          </span>
-        </div>
-      </div>
+      <PatientTabBar
+        :patients="patientsStore.patients"
+        :active-patient-id="activePatientId"
+        :get-count="(id) => labStore.getPatientReports(id).length"
+        module-key="lab"
+        accent-color="#cc5c5c"
+        @select="switchPatient"
+      />
 
       <!-- 当前患者区域 -->
       <div v-if="activePatientId">
@@ -38,166 +33,62 @@
           <el-button type="danger" @click="triggerUpload">📤 上传报告</el-button>
         </div>
 
-        <!-- 工具栏：时间筛选 + 批量操作 -->
-        <div v-if="labStore.getPatientReports(activePatientId).length > 0"
-          style="background:white; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1); padding:10px 14px; margin-bottom:1rem; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.5rem;">
-          <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
-            <div style="display:flex; gap:4px;">
-              <button v-for="m in [3,6,12,0]" :key="m" @click="setDateRange(m)" :style="rangeBtn(m)">
-                {{ m === 0 ? '全部' : `近${m === 12 ? '1年' : m + '个月'}` }}
-              </button>
-            </div>
-            <span style="font-size:12px; color:#999;">
-              共 {{ filteredReports.length }}/{{ labStore.getPatientReports(activePatientId).length }} 份
-            </span>
-          </div>
-          <div style="display:flex; gap:6px;">
-            <el-button size="small" type="primary" @click="downloadAll" :loading="downloadAllLoading">📥 全部下载</el-button>
+        <DateRangeToolbar
+          :show-toolbar="labStore.getPatientReports(activePatientId).length > 0"
+          :range-btn-style="rangeBtnStyle"
+          accent-color="#cc5c5c"
+          :filtered-count="filteredReports.length"
+          :total-count="labStore.getPatientReports(activePatientId).length"
+          @set-range="(m) => setDateRange(m, onDateRangeChange)"
+        >
+          <template #actions>
+            <el-button size="small" type="primary" :loading="downloadAllLoading" @click="downloadAll">📥 全部下载</el-button>
             <el-button size="small" type="warning" @click="batchReparse">🔄 批量解析</el-button>
             <el-button size="small" type="danger" @click="batchDelete">🗑️ 批量删除</el-button>
-          </div>
-        </div>
+          </template>
+        </DateRangeToolbar>
 
-        <!-- 报告按钮列表（体液 / 血液 分类） -->
-        <div v-if="filteredReports.length > 0">
-          <!-- 体液 -->
-          <div v-if="filteredBodyFluid.length > 0" style="margin-bottom:1rem;">
-            <div style="font-size:12px; color:#666; margin-bottom:6px; font-weight:600;">💧 体液检验报告 ({{ filteredBodyFluid.length }})</div>
-            <div style="display:flex; flex-wrap:wrap; gap:8px;">
-              <div v-for="r in filteredBodyFluid" :key="'bf-' + r.id"
-                @click="selectReport(r.id)"
-                :style="reportBtnStyle(r.id, 'bodyFluid')">
-                {{ formatDate(r.date) }} {{ r.testName }}
-              </div>
-            </div>
-          </div>
-          <!-- 血液 -->
-          <div v-if="filteredBlood.length > 0" style="margin-bottom:1rem;">
-            <div style="font-size:12px; color:#666; margin-bottom:6px; font-weight:600;">🩸 血液检验报告 ({{ filteredBlood.length }})</div>
-            <div style="display:flex; flex-wrap:wrap; gap:8px;">
-              <div v-for="r in filteredBlood" :key="'bl-' + r.id"
-                @click="selectReport(r.id)"
-                :style="reportBtnStyle(r.id, 'blood')">
-                {{ formatDate(r.date) }} {{ r.testName }}
-              </div>
-            </div>
-          </div>
-        </div>
+        <LabReportList
+          :reports="filteredReports"
+          :selected-report-id="selectedReportId"
+          @select="selectReport"
+        />
 
         <!-- 选中报告详情 -->
         <div v-if="selectedReport">
           <!-- 操作按钮栏 -->
-          <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; align-items:center;">
-            <el-button size="small" style="background:#6366f1; color:white; border:none;" @click="triggerAiAnalysis" :loading="aiLoading"><img src="/pic/AIGLM.png" style="height:14px; vertical-align:middle; margin-right:5px; filter:brightness(0) invert(1);" /> AI智能分析</el-button>
+          <div class="action-bar">
+            <el-button size="small" style="background:#6366f1; color:white; border:none;" @click="triggerAiAnalysis" :loading="aiLoading"><img src="/pic/DeepSeek.png" style="height:14px; vertical-align:middle; margin-right:5px; filter:brightness(0) invert(1);" /> AI智能分析</el-button>
             <el-button size="small" type="warning" @click="reparseReport">🔄 重新解析OCR</el-button>
             <el-button size="small" style="background:#64748b; color:white; border:none;" @click="viewOcrText">📝 查看OCR原文</el-button>
             <el-button size="small" style="background:#8b5cf6; color:white; border:none;" @click="viewOriginal">📄 查看原报告</el-button>
             <el-button size="small" type="success" @click="editName">✏️ 修改名称</el-button>
             <el-button size="small" type="danger" @click="deleteReport">🗑️ 删除报告</el-button>
-            <div style="margin-left:auto; display:flex; gap:12px; font-size:12px; color:#888; flex-wrap:wrap; align-items:center;">
+            <div class="action-meta">
               <span>📋 {{ selectedReport.testName }}</span>
               <span>📅 {{ formatDate(selectedReport.date) }}</span>
-              <span :style="typeTagStyle">{{ isBodyFluid(selectedReport) ? '💧 体液' : '🩸 血液' }}</span>
+              <span :style="typeTagStyle">{{ isBodyFluidReport(selectedReport) ? '💧 体液' : '🩸 血液' }}</span>
             </div>
           </div>
 
-          <!-- 左右分栏：表格 + AI -->
-          <div style="display:flex; gap:16px; margin-bottom:1.5rem; min-height:450px;">
-            <!-- 检验数据表格 -->
-            <div style="flex:1; background:white; border:1px solid #d0d0d0; border-radius:8px; overflow:hidden; display:flex; flex-direction:column;">
-              <div style="padding:10px 14px; background:#f5f5f5; font-size:13px; font-weight:600; color:#444; border-bottom:1px solid #ddd;">📋 检验数据</div>
-              <div style="flex:1; overflow:auto; padding:8px;">
-                <table style="width:100%; border-collapse:collapse; font-size:13px;">
-                  <thead>
-                    <tr style="background:#f0f0f0;">
-                      <th class="th-cell">项目代码</th>
-                      <th class="th-cell">检验项目</th>
-                      <th class="th-cell" style="text-align:center;">结果</th>
-                      <th class="th-cell" style="text-align:center;">标志</th>
-                      <th class="th-cell" style="text-align:center;">参考范围</th>
-                      <th class="th-cell" style="text-align:center; width:50px;">操作</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-if="!selectedReport.tableData || selectedReport.tableData.length === 0">
-                      <td colspan="6" style="padding:20px; text-align:center; color:#bbb;">暂无结构化数据（OCR未能解析表格）</td>
-                    </tr>
-                    <tr v-for="(row, idx) in (selectedReport.tableData || [])" :key="idx"
-                      :class="rowHighlightClass(row)"
-                      :style="rowHighlightStyle(row)">
-                      <td class="td-cell" style="color:#888;">{{ row.code || '' }}</td>
-                      <td class="td-cell" style="font-weight:500;">{{ row.itemName }}</td>
-                      <td class="td-cell result-cell" style="text-align:center;">
-                        <span class="result-value" :class="resultValueClass(row)">
-                          {{ (row.resultPrefix || '') + row.result }}
-                        </span>
-                        <!-- 进度条：只对纯数值结果显示 -->
-                        <div v-if="calcBarWidth(row) !== null" class="result-bar-wrap">
-                          <div class="result-bar-track">
-                            <div class="result-bar-fill" :class="barFillClass(row)" :style="{ width: calcBarWidth(row) + '%' }"></div>
-                            <div class="result-bar-normal"></div>
-                          </div>
-                        </div>
-                      </td>
-                      <td class="td-cell flag-cell" style="text-align:center;">
-                        <span v-if="row.flag" class="flag-badge" :class="row.flag === '↑' ? 'flag-high' : 'flag-low'">{{ row.flag }}</span>
-                      </td>
-                      <td class="td-cell" style="text-align:center; color:#666; font-size:12px;">{{ row.refRange || '' }}</td>
-                      <td class="td-cell" style="text-align:center;">
-                        <span style="cursor:pointer; color:#6366f1; font-size:13px;" @click="editRow(idx)" title="修改此行">✏️</span>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <!-- AI 分析面板 -->
-            <div style="flex:1; background:#fafaff; border:1px solid #e0e0ff; border-radius:8px; overflow:hidden; display:flex; flex-direction:column;">
-              <div style="padding:10px 14px; background:#e8e8ff; font-size:13px; font-weight:600; color:#555; border-bottom:1px solid #d0d0ff; display:flex; align-items:center; gap:6px;"><img src="/pic/AIGLM.png" style="height:16px; opacity:0.7;" /> AI智能分析</div>
-              <div style="flex:1; padding:16px; overflow-y:auto;">
-                <div v-if="aiLoading" style="display:flex; align-items:center; justify-content:center; height:100%;">
-                  <div style="text-align:center;">
-                    <div style="font-size:2.5rem; margin-bottom:16px;">🔬</div>
-                    <div style="font-size:15px; color:#555;">AI正在分析中...</div>
-                  </div>
-                </div>
-                <div v-else-if="aiResult" style="white-space:pre-wrap; line-height:1.8; font-size:14px; color:#333; background:white; padding:16px; border-radius:8px; border:1px solid #e8e8ff;">{{ aiResult }}</div>
-                <div v-else-if="aiError" style="display:flex; align-items:center; justify-content:center; height:100%;">
-                  <div style="text-align:center; color:#ef4444;">
-                    <div style="font-size:2rem; margin-bottom:12px;">⚠️</div>
-                    <div style="font-size:14px;">{{ aiError }}</div>
-                    <el-button style="margin-top:12px;" size="small" @click="triggerAiAnalysis">🔄 重试</el-button>
-                  </div>
-                </div>
-                <div v-else style="display:flex; align-items:center; justify-content:center; height:100%;">
-                  <div style="text-align:center; color:#aaa;">
-                    <div style="margin-bottom:14px;"><img src="/pic/AIGLM.png" style="height:36px; opacity:0.35;" /></div>
-                    <div style="font-size:14px;">点击上方「AI智能分析」按钮</div>
-                    <div style="font-size:12px; margin-top:4px;">基于检验报告数据进行AI智能解读</div>
-                  </div>
-                </div>
-              </div>
-            </div>
+          <div class="lab-detail-split">
+            <LabReportTable :table-data="selectedReport.tableData || []" @edit-row="editRow" />
+            <AiAnalysisPanel
+              :loading="aiLoading"
+              :result="aiResult"
+              :error="aiError"
+              empty-hint="基于检验报告数据进行AI智能解读"
+              @retry="triggerAiAnalysis"
+            />
           </div>
 
-          <!-- 趋势分析 -->
-          <div style="border:1px solid #e0e0e0; border-radius:8px; padding:16px; background:#fafafa;">
-            <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px; flex-wrap:wrap;">
-              <span style="font-weight:600; font-size:14px; color:#444;">📈 趋势分析</span>
-              <select v-model="trendItem" @change="renderTrendChart"
-                style="padding:6px 12px; border:1px solid #ccc; border-radius:5px; font-size:13px; min-width:180px; cursor:pointer;">
-                <option value="">-- 选择检验项目 --</option>
-                <option v-for="item in trendItems" :key="item" :value="item">{{ item }}</option>
-              </select>
-            </div>
-            <div v-if="trendItem" style="background:white; border-radius:6px; padding:16px; border:1px solid #eee; min-height:350px;">
-              <canvas ref="trendCanvasRef" style="width:100%; height:400px;"></canvas>
-            </div>
-            <div v-else style="text-align:center; color:#bbb; padding:40px; font-size:13px;">
-              选择一个检验项目查看数值变化趋势
-            </div>
-          </div>
+          <LabTrendSection
+            ref="trendSectionRef"
+            :trend-item="trendItem"
+            :trend-items="trendItems"
+            @update:trend-item="trendItem = $event"
+            @render="onTrendRender"
+          />
         </div>
 
         <!-- 无报告提示 -->
@@ -215,69 +106,59 @@
       </div>
     </div>
 
-    <!-- OCR原文弹窗 -->
-    <el-dialog v-model="ocrDialogVisible" title="📝 OCR识别原文" width="700px">
-      <pre style="white-space:pre-wrap; font-size:13px; color:#333; max-height:60vh; overflow-y:auto; background:#f8f9fa; padding:16px; border-radius:8px; line-height:1.6;">{{ ocrText }}</pre>
-      <template #footer>
-        <el-button @click="ocrDialogVisible = false">关闭</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 原报告预览弹窗 -->
-    <el-dialog v-model="originalDialogVisible" title="📄 原检验报告" width="90vw" style="max-width:1000px;">
-      <div style="background:#f5f5f5; display:flex; align-items:center; justify-content:center; min-height:70vh; border-radius:8px; overflow:hidden;">
-        <iframe v-if="originalIsPdf" :src="originalUrl" style="width:100%; height:75vh; border:none;" />
-        <img v-else :src="originalUrl" style="max-width:100%; max-height:70vh; object-fit:contain; border-radius:8px;" />
-      </div>
-      <template #footer>
-        <el-button @click="window.open(originalUrl, '_blank')">↗ 新窗口打开</el-button>
-        <el-button @click="originalDialogVisible = false">关闭</el-button>
-      </template>
-    </el-dialog>
+    <OcrTextDialog v-model:visible="ocrDialogVisible" :text="ocrText" />
+    <OriginalFileDialog
+      v-model:visible="originalDialogVisible"
+      :url="originalUrl"
+      :is-pdf="originalIsPdf"
+      title="📄 原检验报告"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick, onMounted } from 'vue';
-import { useRoute } from 'vue-router';
+import { ref, computed } from 'vue';
 import AppIcon from '@/components/AppIcon.vue';
+import PatientTabBar from '@/components/common/PatientTabBar.vue';
+import DateRangeToolbar from '@/components/common/DateRangeToolbar.vue';
+import AiAnalysisPanel from '@/components/common/AiAnalysisPanel.vue';
+import OcrTextDialog from '@/components/common/OcrTextDialog.vue';
+import OriginalFileDialog from '@/components/common/OriginalFileDialog.vue';
+import LabReportTable from '@/components/lab/LabReportTable.vue';
+import LabReportList from '@/components/lab/LabReportList.vue';
+import LabTrendSection from '@/components/lab/LabTrendSection.vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { usePatientsStore } from '@/stores/usePatients';
-import Chart from 'chart.js/auto';
 import { useLabStore } from '@/stores/useLab';
-import { apiRequest } from '@/api/index';
-import { uploadFileToCloud } from '@/api/index';
+import { usePatientScope } from '@/stores/usePatientScope';
+import { uploadFileToCloud } from '@/api/files';
+import { processOcrFile } from '@/api/ocr';
+import { analyzeWithAi } from '@/api/ai';
+import { deleteLabReport } from '@/api/lab-reports';
+import { useDateRangeFilter } from '@/composables/useDateRangeFilter';
+import { useRoutePatientId } from '@/composables/useRoutePatientId';
+import { isBodyFluidReport } from '@/composables/lab/useLabClassification';
+import { useLabTrendChart } from '@/composables/lab/useLabTrendChart';
+import {
+  selectLabReportDate,
+  extractDateFromFilename,
+  extractTestNameFromFilename
+} from '@/utils/lab-report-utils';
 import { formatDate } from '@/utils/index';
 import { parseLabTableFromOcrText, detectLabTestName } from '@/utils/lab-parser';
 
-const route = useRoute();
 const patientsStore = usePatientsStore();
 const labStore = useLabStore();
+const patientScope = usePatientScope();
 
-// ===== 状态 =====
-const activePatientId = ref(null);
-
-onMounted(() => {
-  const pid = route.query.patientId;
-  if (pid) {
-    const id = Number(pid);
-    if (patientsStore.patients.some(p => p.id === id)) {
-      activePatientId.value = id;
-    }
-  }
-});
+const { activePatientId } = useRoutePatientId(() => patientsStore.patients);
 const selectedReportId = ref(null);
-const filterDateStart = ref('');
-const filterDateEnd = ref('');
-const dateRangeMonths = ref(0);
 const aiLoading = ref(false);
 const aiResult = ref('');
 const aiError = ref('');
 let aiLastRequestTime = 0;
 const AI_COOLDOWN_MS = 5000;
-const trendItem = ref('');
-const trendCanvasRef = ref(null);
-let trendChartInstance = null;
+const trendSectionRef = ref(null);
 
 const ocrDialogVisible = ref(false);
 const ocrText = ref('');
@@ -285,27 +166,19 @@ const originalDialogVisible = ref(false);
 const originalUrl = ref('');
 const originalIsPdf = ref(false);
 
-// ===== Computed =====
 const activePatient = computed(() => patientsStore.getPatientById(activePatientId.value));
 
-const BODY_FLUID_KEYWORDS = ['尿常规', '尿液常规', '粪便常规', '大便常规', '粪常规', '尿', '粪', '便'];
-const BLOOD_EXCLUSIONS = ['钠尿肽', '脑钠肽', 'NT-proBNP', 'BNP'];
-const isBodyFluid = (report) => {
-  if (!report?.testName) return false;
-  const name = report.testName.toLowerCase();
-  if (BLOOD_EXCLUSIONS.some(k => name.includes(k.toLowerCase()))) return false;
-  return BODY_FLUID_KEYWORDS.some(k => name.includes(k.toLowerCase()));
-};
+const {
+  filteredList: filteredReports,
+  setDateRange,
+  rangeBtnStyle
+} = useDateRangeFilter(() =>
+  activePatientId.value ? labStore.getPatientReports(activePatientId.value) : []
+);
 
-const filteredReports = computed(() => {
-  let list = activePatientId.value ? labStore.getPatientReports(activePatientId.value) : [];
-  if (filterDateStart.value) list = list.filter(r => r.date >= filterDateStart.value);
-  if (filterDateEnd.value) list = list.filter(r => r.date <= filterDateEnd.value);
-  return list;
-});
-const filteredBodyFluid = computed(() => filteredReports.value.filter(r => isBodyFluid(r)));
-const filteredBlood = computed(() => filteredReports.value.filter(r => !isBodyFluid(r)));
-const selectedReport = computed(() => selectedReportId.value ? labStore.getReportById(selectedReportId.value) : null);
+const selectedReport = computed(() =>
+  selectedReportId.value ? labStore.getReportById(selectedReportId.value) : null
+);
 
 const trendItems = computed(() => {
   if (!selectedReport.value?.tableData) return [];
@@ -317,71 +190,48 @@ const trendItems = computed(() => {
   return Array.from(items).sort();
 });
 
-const typeTagStyle = computed(() => isBodyFluid(selectedReport.value)
+const typeTagStyle = computed(() => isBodyFluidReport(selectedReport.value)
   ? { padding: '2px 8px', borderRadius: '12px', background: '#e8f5e9', color: '#2e7d32', border: '1px solid #a5d6a7' }
   : { padding: '2px 8px', borderRadius: '12px', background: '#fff5f5', color: '#cc5c5c', border: '1px solid #e8b4b4' }
 );
 
-// ===== 样式函数 =====
-const tabStyle = (patientId) => ({
-  padding: '7px 16px', borderRadius: '20px', cursor: 'pointer', fontSize: '13px', whiteSpace: 'nowrap',
-  fontWeight: activePatientId.value === patientId ? '600' : '400',
-  background: activePatientId.value === patientId ? '#cc5c5c' : '#f5f5f5',
-  color: activePatientId.value === patientId ? 'white' : '#555',
-  border: activePatientId.value === patientId ? '1px solid #cc5c5c' : '1px solid #ddd',
-  transition: 'all 0.2s'
+const { trendItem, renderTrendChart, resetTrend } = useLabTrendChart({
+  labStore,
+  activePatientId,
+  selectedReport,
+  getCanvasEl: () => {
+    const el = trendSectionRef.value?.canvasEl;
+    return el?.value ?? el;
+  }
 });
 
-const rangeBtn = (m) => ({
-  padding: '4px 8px', fontSize: '12px', borderRadius: '4px', cursor: 'pointer', border: '1px solid',
-  borderColor: dateRangeMonths.value === m ? '#cc5c5c' : '#ddd',
-  background: dateRangeMonths.value === m ? '#fff5f5' : '#f5f5f5',
-  color: dateRangeMonths.value === m ? '#cc5c5c' : '#666',
-  fontWeight: dateRangeMonths.value === m ? '600' : '400'
-});
-
-const reportBtnStyle = (id, type) => {
-  const selected = selectedReportId.value === id;
-  return {
-    padding: '7px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px',
-    fontWeight: '500', whiteSpace: 'nowrap', transition: 'all 0.2s',
-    background: selected ? (type === 'bodyFluid' ? '#2e7d32' : '#cc5c5c') : (type === 'bodyFluid' ? '#e8f5e9' : '#fff5f5'),
-    border: `1px solid ${selected ? (type === 'bodyFluid' ? '#2e7d32' : '#cc5c5c') : (type === 'bodyFluid' ? '#a5d6a7' : '#e8b4b4')}`,
-    color: selected ? 'white' : (type === 'bodyFluid' ? '#2e7d32' : '#cc5c5c')
-  };
+const onDateRangeChange = () => {
+  selectedReportId.value = null;
+  resetTrend();
+  aiResult.value = '';
+  aiError.value = '';
 };
 
-// ===== 操作函数 =====
 const switchPatient = (id) => {
   activePatientId.value = id;
+  patientScope.setCurrentPatient(id);
   selectedReportId.value = null;
-  trendItem.value = '';
+  resetTrend();
   aiResult.value = '';
   aiError.value = '';
 };
 
 const selectReport = (id) => {
   selectedReportId.value = id;
-  trendItem.value = '';
+  resetTrend();
   aiResult.value = '';
   aiError.value = '';
   aiLoading.value = false;
 };
 
-const setDateRange = (months) => {
-  dateRangeMonths.value = months;
-  // 【修复】切换日期范围时清空选中报告，避免显示不在筛选范围内的报告
-  selectedReportId.value = null;
-  trendItem.value = '';
-  aiResult.value = '';
-  aiError.value = '';
-  if (months === 0) { filterDateStart.value = ''; filterDateEnd.value = ''; return; }
-  const end = new Date(), start = new Date();
-  start.setMonth(start.getMonth() - months);
-  // 【修复】使用本地日期格式 YYYY-MM-DD，避免 toISOString 的 UTC 转换问题
-  const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  filterDateEnd.value = fmt(end);
-  filterDateStart.value = fmt(start);
+const onTrendRender = async () => {
+  const result = await renderTrendChart();
+  if (result?.empty) ElMessage.warning(`未找到"${trendItem.value}"的数值数据`);
 };
 
 // ===== 上传报告 =====
@@ -409,7 +259,7 @@ const triggerUpload = () => {
       try {
         ElMessage.info(`正在上传 ${file.name}...`);
         const fileUrl = await uploadFileToCloud(file, 'lab-reports');
-        const ocrResult = await performOCR(file);
+        const ocrResult = await processOcrFile(file, { maxRetries: 2 });
         console.log(`检验报告OCR [${i + 1}/${totalFiles}]:`, ocrResult.text?.substring(0, 80));
         let reportDate = selectLabReportDate(ocrResult.text || '', ocrResult.extractedDates || []);
         if (!reportDate) reportDate = extractDateFromFilename(file.name);
@@ -451,62 +301,6 @@ const triggerUpload = () => {
     if (successCount > 0) ElMessage.success(`成功上传 ${successCount}/${validFiles.length} 个检验报告`);
   };
   input.click();
-};
-
-// ===== OCR =====
-const performOCR = async (file, maxRetries = 2) => {
-  const formData = new FormData();
-  formData.append('file', file);
-  const token = localStorage.getItem('emr_token');
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      const response = await fetch('/api/ocr/process', {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: formData
-      });
-      if (!response.ok) throw new Error(`OCR HTTP ${response.status}`);
-      const data = await response.json();
-      if (!data.success) throw new Error(data.error || 'OCR失败');
-      return data.data;
-    } catch (err) {
-      if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 2000 * (attempt + 1))); continue; }
-      throw err;
-    }
-  }
-};
-
-// ===== 日期/名称识别工具 =====
-const selectLabReportDate = (ocrText, dates) => {
-  if (!ocrText) return dates?.length ? dates[dates.length - 1] : null;
-  const priorityKeywords = ['采样时间', '采集时间', '接收时间', '检验时间', '申请时间', '报告时间'];
-  const lines = ocrText.split('\n');
-  for (const keyword of priorityKeywords) {
-    for (const line of lines) {
-      if (!line.includes(keyword)) continue;
-      const m = line.match(/(\d{4})[-\/年](\d{1,2})[-\/月](\d{1,2})/);
-      if (m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
-    }
-  }
-  return dates?.length ? dates[dates.length - 1] : null;
-};
-
-const extractDateFromFilename = (filename) => {
-  if (!filename) return null;
-  const m = filename.match(/(\d{4})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])/);
-  if (!m) return null;
-  return `${m[1]}-${m[2]}-${m[3]}`;
-};
-
-
-const extractTestNameFromFilename = (filename) => {
-  if (!filename) return { matched: null, hint: '' };
-  const cleaned = filename.replace(/\d{8,}/, '').replace(/\.[^.]+$/, '').trim();
-  const keywords = ['血常规', '尿常规', '肝功能', '肾功能', '血脂', '甲功', '血糖', '凝血', '电解质', '大便常规', '粪便常规'];
-  for (const k of keywords) {
-    if (cleaned.includes(k)) return { matched: k, hint: k };
-  }
-  return { matched: null, hint: cleaned };
 };
 
 // ===== 报告操作 =====
@@ -585,7 +379,7 @@ const deleteReport = async () => {
       '确认删除', { type: 'warning' }
     );
     if (selectedReport.value.backendId) {
-      try { await apiRequest(`/lab-reports/${selectedReport.value.backendId}`, { method: 'DELETE' }); } catch (_) {}
+      try { await deleteLabReport(selectedReport.value.backendId); } catch (_) {}
     }
     labStore.deleteReport(selectedReportId.value);
     selectedReportId.value = null;
@@ -699,9 +493,11 @@ const triggerAiAnalysis = async () => {
       if (item.refRange) line += ` (参考范围: ${item.refRange})`;
       dataText += line + '\n';
     });
-    const res = await apiRequest('/ai/analyze', {
-      method: 'POST',
-      body: JSON.stringify({ type: 'lab', data: dataText, title: selectedReport.value.testName || '', patientName: patient?.name || '未知' })
+    const res = await analyzeWithAi({
+      type: 'lab',
+      data: dataText,
+      title: selectedReport.value.testName || '',
+      patientName: patient?.name || '未知'
     });
     if (res.code === 200 && res.data) { aiResult.value = res.data; }
     else throw new Error(res.message || 'AI分析失败');
@@ -712,211 +508,50 @@ const triggerAiAnalysis = async () => {
   }
 };
 
-// ===== 趋势图 =====
-const renderTrendChart = async () => {
-  const itemName = trendItem.value;
-  if (!itemName || !activePatientId.value) return;
-  // Chart.js is now imported locally, no need for CDN loading
-  const sel = selectedReport.value;
-  const isFluid = isBodyFluid(sel);
-  const reports = labStore.getPatientReports(activePatientId.value).filter(r => isBodyFluid(r) === isFluid);
-  const dataPoints = []; let unit = '', refMin = null, refMax = null;
-  reports.forEach(r => {
-    (r.tableData || []).forEach(row => {
-      if (row.itemName !== itemName || !row.result || row.resultPrefix) return;
-      const val = parseFloat(row.result);
-      if (isNaN(val)) return;
-      dataPoints.push({ date: r.date, value: val, flag: row.flag });
-      if (!unit && row.unit) unit = row.unit;
-      if (row.refMin != null) refMin = row.refMin;
-      if (row.refMax != null) refMax = row.refMax;
-      if ((refMin === null || refMax === null) && row.refRange) {
-        const m = row.refRange.match(/^([<>]?\d+\.?\d*)\s*[-~—–]+\s*([<>]?\d+\.?\d*)/);
-        if (m) { refMin = parseFloat(m[1]); refMax = parseFloat(m[2]); }
-      }
-    });
-  });
-  if (dataPoints.length === 0) { ElMessage.warning(`未找到"${itemName}"的数值数据`); return; }
-  dataPoints.sort((a, b) => new Date(a.date) - new Date(b.date));
-  let recent = dataPoints.slice(-10);
-  if (recent.length === 1) recent = [recent[0], { ...recent[0] }];
-  const allVals = recent.map(d => d.value);
-  const dataMin = Math.min(...allVals), dataMax = Math.max(...allVals);
-  let yMin = 0, yMax = 10;
-  if (refMax !== null) { yMin = Math.max(0, refMin !== null ? Math.min(refMin * 0.5, dataMin * 0.85) : dataMin * 0.7); yMax = Math.max(refMax * 1.5, dataMax * 1.15); }
-  else { yMin = Math.max(0, dataMin * 0.7); yMax = dataMax * 1.3; }
-  if (yMax < dataMax) yMax = dataMax * 1.15;
-  await nextTick();
-  const canvas = trendCanvasRef.value;
-  if (!canvas) return;
-  if (trendChartInstance) { trendChartInstance.destroy(); trendChartInstance = null; }
-  const COLOR_HIGH = '#FF0000', COLOR_LOW = '#30CC00', COLOR_NORMAL = '#333333';
-  const pointColors = recent.map(d => d.flag === '↑' ? COLOR_HIGH : d.flag === '↓' ? COLOR_LOW : COLOR_NORMAL);
-  const datasets = [{
-    label: itemName, data: recent.map(d => d.value),
-    borderColor: COLOR_NORMAL, backgroundColor: 'rgba(51,51,51,0.05)', borderWidth: 2,
-    pointBackgroundColor: pointColors, pointBorderColor: pointColors,
-    pointRadius: 5, pointHoverRadius: 7, tension: 0.3, fill: false,
-    segment: { borderColor: (c) => { const p0 = pointColors[c.p0DataIndex], p1 = pointColors[c.p1DataIndex]; return p1 !== COLOR_NORMAL ? p1 : p0; } }
-  }];
-  if (refMin !== null && refMax !== null) {
-    datasets.push({ label: '参考上限', data: recent.map(() => refMax), borderColor: 'rgba(150,150,150,0.6)', borderWidth: 1, borderDash: [5,5], pointRadius: 0, fill: false });
-    datasets.push({ label: '参考下限', data: recent.map(() => refMin), borderColor: 'rgba(150,150,150,0.6)', borderWidth: 1, borderDash: [5,5], pointRadius: 0, fill: { target: '-1', above: 'rgba(180,180,180,0.18)' } });
-  } else if (refMax !== null) {
-    datasets.push({ label: '参考上限', data: recent.map(() => refMax), borderColor: 'rgba(150,150,150,0.6)', borderWidth: 1, borderDash: [5,5], pointRadius: 0, fill: false });
-  }
-  const dataLabelPlugin = {
-    id: 'dataLabels',
-    afterDatasetsDraw(chart) {
-      const ctx2 = chart.ctx, meta = chart.getDatasetMeta(0);
-      if (!meta || meta.hidden) return;
-      const n = meta.data.length, fs = n <= 4 ? 12 : n <= 7 ? 11 : 10;
-      ctx2.save(); ctx2.font = `600 ${fs}px -apple-system, sans-serif`; ctx2.textAlign = 'center';
-      meta.data.forEach((pt, idx) => {
-        const v = chart.data.datasets[0].data[idx];
-        if (v === null || v === undefined) return;
-        const { chartArea } = chart;
-        const nearTop = (pt.y - chartArea.top) < 30, nearBottom = (chartArea.bottom - pt.y) < 30;
-        let offsetY, baseline;
-        if (nearTop) { offsetY = 14; baseline = 'top'; }
-        else if (nearBottom) { offsetY = -10; baseline = 'bottom'; }
-        else { offsetY = idx % 2 === 0 ? -10 : 14; baseline = idx % 2 === 0 ? 'bottom' : 'top'; }
-        const text = String(v), tw = ctx2.measureText(text).width;
-        const bgY = baseline === 'bottom' ? pt.y + offsetY - fs - 2 : pt.y + offsetY - 2;
-        ctx2.fillStyle = 'rgba(255,255,255,0.85)';
-        ctx2.fillRect(pt.x - tw / 2 - 3, bgY, tw + 6, fs + 4);
-        ctx2.textBaseline = baseline;
-        ctx2.fillStyle = pointColors[idx] || COLOR_NORMAL;
-        ctx2.fillText(text, pt.x, pt.y + offsetY);
-      });
-      ctx2.restore();
-    }
-  };
-  trendChartInstance = new Chart(canvas.getContext('2d'), {
-    type: 'line',
-    data: { labels: recent.map(d => formatDate(d.date)), datasets },
-    plugins: [dataLabelPlugin],
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { title: { display: true, text: `${itemName}${unit ? ' (' + unit + ')' : ''}`, font: { size: 14, weight: '600' }, color: '#333' }, legend: { display: false }, tooltip: { enabled: false } },
-      scales: {
-        y: { min: yMin, max: yMax, title: { display: true, text: unit || '数值', font: { size: 12 } }, grid: { color: 'rgba(0,0,0,0.06)' } },
-        x: { title: { display: true, text: '检验日期', font: { size: 12 } }, grid: { display: false } }
-      }
-    }
-  });
-};
-
-watch(selectedReport, () => { trendItem.value = ''; if (trendChartInstance) { trendChartInstance.destroy(); trendChartInstance = null; } });
-
-// ===== 表格美化辅助函数 =====
-const rowHighlightClass = (row) => {
-  if (row.flag === '↑') return 'row-high';
-  if (row.flag === '↓') return 'row-low';
-  return 'row-normal';
-};
-
-const rowHighlightStyle = (row) => {
-  if (!row.flag) {
-    return {};
-  }
-  return {};
-};
-
-const resultValueClass = (row) => {
-  if (row.flag === '↑') return 'result-high';
-  if (row.flag === '↓') return 'result-low';
-  return 'result-normal';
-};
-
-const calcBarWidth = (row) => {
-  if (row.resultPrefix) return null;
-  const val = parseFloat(row.result);
-  if (isNaN(val)) return null;
-  const min = row.refMin != null ? row.refMin : (() => {
-    if (!row.refRange) return null;
-    const m = row.refRange.match(/^([<>]?\d+\.?\d*)\s*[-~—–]+\s*([<>]?\d+\.?\d*)/);
-    return m ? parseFloat(m[1]) : null;
-  })();
-  const max = row.refMax != null ? row.refMax : (() => {
-    if (!row.refRange) return null;
-    const m = row.refRange.match(/^([<>]?\d+\.?\d*)\s*[-~—–]+\s*([<>]?\d+\.?\d*)/);
-    return m ? parseFloat(m[2]) : null;
-  })();
-  if (min == null || max == null || max <= min) return null;
-  const range = max - min;
-  const padding = range * 0.4;
-  const trackMin = min - padding;
-  const trackMax = max + padding;
-  return Math.max(2, Math.min(98, ((val - trackMin) / (trackMax - trackMin)) * 100));
-};
-
-const barFillClass = (row) => {
-  if (row.flag === '↑') return 'bar-high';
-  if (row.flag === '↓') return 'bar-low';
-  return 'bar-ok';
-};
 </script>
 
 <style scoped>
-.th-cell { padding: 10px 12px; text-align: left; border-bottom: 2px solid #ccc; font-weight: 600; color: #444; white-space: nowrap; }
-.td-cell { padding: 8px 12px; border-bottom: 1px solid #eee; }
-
-/* ===== 异常行高亮 ===== */
-.row-high { background: #fff5f5 !important; border-left: 3px solid #ef4444; }
-.row-low  { background: #f0f7ff !important; border-left: 3px solid #3b82f6; }
-.row-normal { border-left: 3px solid transparent; }
-
-/* ===== 结果值样式 ===== */
-.result-cell { vertical-align: middle; }
-.result-value { font-weight: 700; font-size: 14px; display: block; line-height: 1.3; }
-.result-high { color: #dc2626; }
-.result-low  { color: #2563eb; }
-.result-normal { color: #1e2d4a; }
-
-/* ===== 进度条 ===== */
-.result-bar-wrap { margin-top: 4px; }
-.result-bar-track {
-  position: relative;
-  height: 5px;
-  background: #e5e7eb;
-  border-radius: 99px;
-  overflow: hidden;
-  width: 100%;
-  min-width: 60px;
+.lab-detail-split {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 1.5rem;
+  min-height: 450px;
 }
-.result-bar-fill {
-  height: 100%;
-  border-radius: 99px;
-  transition: width 0.4s ease;
-}
-.bar-high  { background: linear-gradient(90deg, #fca5a5, #ef4444); }
-.bar-low   { background: linear-gradient(90deg, #93c5fd, #3b82f6); }
-.bar-ok    { background: linear-gradient(90deg, #6ee7b7, #10b981); }
 
-/* ===== 标志徽标 ===== */
-.flag-badge {
-  display: inline-flex;
+/* ===== 报告操作按钮栏 ===== */
+.action-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
-  width: 26px; height: 26px;
-  border-radius: 50%;
-  font-size: 14px;
-  font-weight: 800;
 }
-.flag-high { background: #fee2e2; color: #dc2626; }
-.flag-low  { background: #dbeafe; color: #2563eb; }
+.action-meta {
+  margin-left: auto;
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: #888;
+  flex-wrap: wrap;
+  align-items: center;
+}
 
-/* ===== Step1: 患者Tab横向单行滚动（不换行） ===== */
+/* ===== 移动端：按钮纵向堆叠、等宽对齐 ===== */
 @media (max-width: 768px) {
-  div[style*="flex-wrap:wrap; gap:8px; margin-bottom:1.2rem"] {
-    flex-wrap: nowrap !important;
-    overflow-x: auto !important;
-    scrollbar-width: none !important;
-    padding-bottom: 8px !important;
-    -webkit-overflow-scrolling: touch;
+  .action-bar {
+    flex-direction: column;
+    align-items: stretch;
   }
-  div[style*="flex-wrap:wrap; gap:8px; margin-bottom:1.2rem"]::-webkit-scrollbar { display: none; }
+  .action-bar .el-button {
+    width: 100%;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+  .action-meta {
+    margin-left: 0;
+    justify-content: flex-start;
+    padding-top: 4px;
+  }
 }
 
 /* ===== Step2: 患者信息栏手机端上下两行 ===== */
@@ -941,25 +576,11 @@ const barFillClass = (row) => {
   }
 }
 
-/* ===== Step4: 左右分栏垂直堆叠 + 高度自适应 ===== */
 @media (max-width: 768px) {
-  div[style*="display:flex; gap:16px; min-height:480px"] {
-    flex-direction: column !important;
-    min-height: auto !important;
+  .lab-detail-split {
+    flex-direction: column;
+    min-height: auto;
   }
-  div[style*="display:flex; gap:16px; min-height:480px"] > div {
-    min-height: 40vh !important;
-  }
-}
-@media (max-width: 576px) {
-  div[style*="display:flex; gap:16px; min-height:480px"] > div {
-    min-height: 35vh !important;
-  }
-}
-
-/* 表格横向滚动 */
-@media (max-width: 768px) {
-  .el-table { font-size: 13px; }
-  .th-cell, .td-cell { padding: 6px 8px; font-size: 12px; }
+  .lab-detail-split > * { min-height: 40vh; }
 }
 </style>

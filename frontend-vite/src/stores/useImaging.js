@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { reactive, ref } from 'vue';
-import { apiRequest } from '@/api/index';
+import { fetchImagingReportsByPatient } from '@/api/imaging-reports';
 import { useAuthStore } from './useAuth';
 
 export const useImagingStore = defineStore('imaging', () => {
@@ -34,7 +34,7 @@ export const useImagingStore = defineStore('imaging', () => {
     const all = [];
     for (const p of patients) {
       try {
-        const res = await apiRequest(`/imaging-reports/patient/${p.id}`);
+        const res = await fetchImagingReportsByPatient(p.id);
         if (res.code === 200 && res.data) {
           // 【修复】后端返回reportDate，映射为前端date
           all.push(...res.data.map(r => ({

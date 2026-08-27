@@ -249,27 +249,27 @@ def normalize_date(date_str: str) -> Optional[str]:
     # Remove whitespace
     s = date_str.strip().replace(' ', '')
     
-    # Chinese format: 2024年03月15日
+    # Chinese format: 2026年03月15日
     m = re.match(r'(\d{4})年(\d{1,2})月(\d{1,2})日?', s)
     if m:
         return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
     
-    # Dot format: 2024.03.15
+    # Dot format: 2026.03.15
     m = re.match(r'(\d{4})\.(\d{1,2})\.(\d{1,2})', s)
     if m:
         return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
     
-    # Slash format: 2024/03/15
+    # Slash format: 2026/03/15
     m = re.match(r'(\d{4})/(\d{1,2})/(\d{1,2})', s)
     if m:
         return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
     
-    # Dash format: 2024-03-15
+    # Dash format: 2026-03-15
     m = re.match(r'(\d{4})-(\d{1,2})-(\d{1,2})', s)
     if m:
         return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
     
-    # 8-digit format: 20240315
+    # 8-digit format: 20260315
     m = re.match(r'(\d{4})(\d{2})(\d{2})', s)
     if m:
         year, month, day = int(m.group(1)), int(m.group(2)), int(m.group(3))

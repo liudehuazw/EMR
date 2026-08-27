@@ -117,9 +117,10 @@
 
 - 👤 **患者档案管理** - 患者信息的增删改查、头像上传裁剪
 - 📊 **病历统计** - 按日期自动分类的病历管理，智能提取就诊日期
-- 💰 **发票统计** - 医疗费用的统计和管理
-- 🔬 **检验报告** - 支持图片/PDF上传，自动提取数值和正常范围
+- 💰 **发票统计** - 医疗费用统计；支持商保报销录入与实际自付汇总
+- 🔬 **检验报告** - 支持图片/PDF上传，自动提取数值和正常范围；趋势图与 AI 分析
 - 🏥 **影像报告** - 医学影像资料的管理
+- 🤖 **AI 就诊助手** - 基于检验/病历数据的智能解读（需配置 API Key）
 - �️ **头像管理** - 支持头像上传、裁剪、缩放、拖动调整
 - 👥 **演示模式** - 演示账户 user/user，数据不保存，刷新即清空
 - �📱 **响应式设计** - 兼容手机浏览器访问
@@ -168,14 +169,14 @@ npm run dev
 
 然后访问：http://localhost:5173
 
-**构建并部署到服务器**：
+**构建并部署到服务器**（先复制示例脚本并填入服务器信息）：
 
 ```powershell
 cd frontend-vite
+copy deploy-local.ps1.example deploy-local.ps1
+# 编辑 deploy-local.ps1 填入你的服务器地址后执行
 .\deploy-local.ps1
 ```
-
-脚本自动执行 `npm run build` 并通过 SCP 上传 `dist/` 到 `/var/www/html/`
 
 ### 4. OCR 服务启动
 
@@ -245,27 +246,38 @@ Electronic-medical-record/
 │   ├── src/
 │   │   ├── views/             # 页面视图组件
 │   │   ├── stores/            # Pinia 状态管理
-│   │   ├── components/        # 公共组件
+│   │   ├── components/        # 公共/业务组件（含 AI 助手、发票汇总栏等）
+│   │   ├── composables/       # 组合式逻辑（日期筛选、主题调色板等）
+│   │   ├── config/            # 设计令牌配置
 │   │   ├── router/            # Vue Router 路由
 │   │   ├── api/               # API 请求封装
-│   │   └── utils/             # 工具函数 (含 lab-parser.js)
-│   ├── dist/                  # 构建输出（部署到服务器）
-│   ├── deploy-local.ps1       # 一键构建+部署脚本（Windows）
+│   │   └── utils/             # 工具函数 (含 lab-parser.js、invoice-parser.js)
+│   ├── deploy.ps1.example     # 部署脚本示例（需复制后配置）
+│   ├── deploy-local.ps1.example
 │   └── vite.config.js         # Vite 构建配置
 ├── database/                  # 数据库脚本
-│   ├── init.sql               # 初始化脚本
-│   └── V2__add_avatar_url.sql # 迁移脚本
+│   ├── init.sql               # 初始化脚本（库名 emr_db）
+│   ├── V2__add_avatar_url.sql
+│   ├── V3__add_emr_data_tables.sql
+│   └── V4__add_commercial_insurance.sql
 ├── deploy/                    # OCR 服务文件
 │   ├── main.py                # OCR 服务代码
 │   ├── ocr-cloud.dockerfile   # Docker 构建文件
 │   └── cloud-requirements.txt # Python 依赖
 ├── docs/                      # 文档
-│   ├── PRD-patient-module.md  # 患者模块需求
-│   └── ocr-module-requirements.md # OCR 模块需求
+│   ├── PRD-patient-module.md
+│   ├── ocr-module-requirements.md
+│   └── commercial-insurance-requirements.md
+├── backend/local.env.example  # 本地环境变量示例
 ├── deploy-update.sh           # 自动部署脚本
 ├── README.md                  # 项目说明
-├── DEVELOPMENT_LOG.md         # 开发日志
 └── DEPLOY.md                  # 部署文档
+```
+
+## 数据库迁移（已有库升级）
+
+```bash
+mysql -u root -p emr_db < database/V4__add_commercial_insurance.sql
 ```
 
 ## API文档

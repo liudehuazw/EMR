@@ -26,7 +26,7 @@ const routes = [
     path: '/patients/:id',
     name: 'PatientDetail',
     component: () => import('@/views/PatientDetailView.vue'),
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true, activeMenu: '/patients' }
   },
   {
     path: '/records',

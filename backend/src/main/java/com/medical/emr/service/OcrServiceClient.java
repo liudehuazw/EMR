@@ -7,6 +7,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.*;
 import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -40,7 +41,7 @@ public class OcrServiceClient {
             
             try {
                 String boundary = "----OCRFormBoundary" + System.currentTimeMillis();
-                URL url = new URL(ocrServiceUrl + "/ocr/image");
+                URL url = URI.create(ocrServiceUrl + "/ocr/image").toURL();
                 HttpURLConnection connection = (HttpURLConnection) url.openConnection();
                 
                 // Setup timeouts (5 minutes for large PDFs)
@@ -107,7 +108,7 @@ public class OcrServiceClient {
     private OcrResponse processSinglePdf(File pdfFile, String filename) {
         try {
             String boundary = "----OCRFormBoundary" + System.currentTimeMillis();
-            URL url = new URL(ocrServiceUrl + "/ocr/pdf");
+            URL url = URI.create(ocrServiceUrl + "/ocr/pdf").toURL();
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
             
             // Setup timeouts (5 minutes for large PDFs)
@@ -145,7 +146,7 @@ public class OcrServiceClient {
      */
     public boolean checkHealth() {
         try {
-            URL url = new URL(ocrServiceUrl + "/health");
+            URL url = URI.create(ocrServiceUrl + "/health").toURL();
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
             connection.setRequestMethod("GET");
             
@@ -163,7 +164,7 @@ public class OcrServiceClient {
      */
     public String getServiceInfo() {
         try {
-            URL url = new URL(ocrServiceUrl + "/info");
+            URL url = URI.create(ocrServiceUrl + "/info").toURL();
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
             connection.setRequestMethod("GET");
             

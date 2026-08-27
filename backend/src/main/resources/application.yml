@@ -9,9 +9,9 @@ spring:
   
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/emr_db?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai}
-    username: ${SPRING_DATASOURCE_USERNAME:root}
-    password: ${SPRING_DATASOURCE_PASSWORD:your_password_here}
+    url: jdbc:mysql://localhost:3306/emr_db?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
+    username: root
+    password: ${SPRING_DATASOURCE_PASSWORD:}
     
   servlet:
     multipart:
@@ -21,6 +21,24 @@ spring:
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: GMT+8
+
+  # Redis 缓存配置（连接宝塔Docker Redis，端口26739）
+  redis:
+    host: ${REDIS_HOST:127.0.0.1}
+    port: ${REDIS_PORT:26739}
+    password: ${REDIS_PASSWORD:}
+    timeout: 3000ms
+    database: 0
+
+# 缓存配置
+cache:
+  ttl:
+    patients: 300        # 患者数据缓存5分钟
+    lab-reports: 300     # 检验报告缓存5分钟
+    imaging-reports: 300 # 影像报告缓存5分钟
+    invoices: 300        # 发票缓存5分钟
+    medical-records: 300 # 病历缓存5分钟
+    users: 1800          # 用户信息缓存30分钟
 
 mybatis-plus:
   configuration:
@@ -35,7 +53,7 @@ mybatis-plus:
 
 # JWT配置
 jwt:
-  secret: emr-secret-key-2024-medical-record-system
+  secret: ${JWT_SECRET:emr-dev-secret-do-not-use-in-prod}
   expiration: 86400000 # 24小时
 
 # 文件上传配置
@@ -52,15 +70,15 @@ ocr:
 # 智谱AI配置
 zhipu:
   ai:
-    api-key: ${ZHIPU_API_KEY:your_zhipu_api_key_here}
-    api-url: https://open.bigmodel.cn/api/paas/v4/chat/completions
-    model: glm-4.7-flash
-    timeout: 60000
+    api-key: ${DEEPSEEK_API_KEY:}
+    api-url: https://api.deepseek.com/v1/chat/completions
+    model: deepseek-v4-flash
+    timeout: ${DEEPSEEK_API_KEY_TIMEOUT:300000}
 
 # 阿里云OSS配置
 aliyun:
   oss:
     endpoint: oss-cn-hangzhou.aliyuncs.com
-    access-key-id: ${ALIYUN_OSS_ACCESS_KEY_ID:your_access_key_id_here}
-    access-key-secret: ${ALIYUN_OSS_ACCESS_KEY_SECRET:your_access_key_secret_here}
-    bucket-name: ${ALIYUN_OSS_BUCKET_NAME:your_bucket_name_here}
+    access-key-id: ${ALIYUN_OSS_ACCESS_KEY_ID:}
+    access-key-secret: ${ALIYUN_OSS_ACCESS_KEY_SECRET:}
+    bucket-name: ${ALIYUN_OSS_BUCKET_NAME:your-bucket-name}

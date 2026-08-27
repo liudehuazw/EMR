@@ -12,6 +12,10 @@
         <component :is="Component" :key="route.name" />
       </Transition>
     </router-view>
+    <!-- AI 就诊助手（登录且非演示模式时显示） -->
+    <AiAssistantWidget v-if="authStore.isLoggedIn && !authStore.isDemoMode" />
+    <!-- 开发/迭代：实时主题调色板 -->
+    <ThemeTunerPanel v-if="themeTunerEnabled" />
   </div>
 </template>
 
@@ -24,6 +28,11 @@ import { useImagingStore } from '@/stores/useImaging';
 import { useInvoiceStore } from '@/stores/useInvoice';
 import { useRecordsStore } from '@/stores/useRecords';
 import NavBar from '@/components/NavBar.vue';
+import AiAssistantWidget from '@/components/ai/AiAssistantWidget.vue';
+import ThemeTunerPanel from '@/components/dev/ThemeTunerPanel.vue';
+import { isThemeTunerEnabled } from '@/config/design-tokens';
+
+const themeTunerEnabled = isThemeTunerEnabled();
 
 const authStore = useAuthStore();
 const patientsStore = usePatientsStore();

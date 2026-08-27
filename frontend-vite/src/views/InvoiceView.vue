@@ -1,40 +1,42 @@
 <template>
-  <div class="invoice-layout">
-    <!-- 左侧患者列表 -->
-    <div class="patient-sidebar">
-      <div class="sidebar-title">患者列表</div>
-      <div v-for="p in patientsStore.patients" :key="'inv-p-' + p.id"
-        @click="switchPatient(p.id)" :style="sidebarItemStyle(p.id)">
-        {{ p.name }}
-        <span v-if="invoiceStore.getPatientInvoices(p.id).length > 0" style="font-size:11px; opacity:0.7;">
-          ({{ invoiceStore.getPatientInvoices(p.id).length }})
-        </span>
-      </div>
-    </div>
+  <div class="dashboard">
+    <div class="content-card">
+      <h2 style="margin:0 0 1rem; display:flex; align-items:center; gap:8px;"><AppIcon name="invoice" :size="22" style="color:#d03050;" /> 发票统计管理</h2>
+
+      <!-- 患者 pill 按钮 -->
+      <PatientTabBar
+      :patients="patientsStore.patients"
+      :active-patient-id="activePatientId"
+      :get-count="(id) => invoiceStore.getPatientInvoices(id).length"
+      module-key="invoice"
+      accent-color="#d03050"
+      @select="switchPatient"
+    />
 
     <!-- 右侧内容区 -->
     <div v-if="activePatientId" class="invoice-main">
       <!-- 顶部工具栏 -->
       <div class="toolbar-card">
         <!-- 左侧时间筛选 -->
-        <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
-          <div style="display:flex; gap:4px;">
-            <button v-for="m in [1,3,6,12]" :key="m" @click="setDateRange(m)" :style="rangeBtn(m)">
+        <div class="toolbar-filters">
+          <div class="range-quick-btns">
+            <button v-for="m in [1,3,6,12]" :key="m" type="button" @click="setDateRange(m)" :style="invoiceRangeBtn(m)">
               近{{ m === 12 ? '1年' : m + '个月' }}
             </button>
           </div>
-          <div style="display:flex; align-items:center; gap:4px; font-size:13px; color:#555;">
-            <span>📅</span>
-            <input type="date" v-model="filterDateStart" @change="dateRangeMonths = 0"
-              style="border:1px solid #ddd; border-radius:4px; padding:4px 8px; font-size:12px; outline:none;">
-            <span>至</span>
-            <input type="date" v-model="filterDateEnd" @change="dateRangeMonths = 0"
-              style="border:1px solid #ddd; border-radius:4px; padding:4px 8px; font-size:12px; outline:none;">
-          </div>
-          <button v-if="filterDateStart || filterDateEnd" @click="clearFilter"
-            style="padding:4px 10px; background:#f5f5f5; border:1px solid #ddd; border-radius:4px; cursor:pointer; font-size:12px; color:#666;">
-            ✕ 清除
-          </button>
+          <DateRangePicker
+            v-model:start="filterDateStart"
+            v-model:end="filterDateEnd"
+            accent-color="#d03050"
+            @change="onCustomDateRangeChange"
+            @clear="clearFilter"
+          />
+          <YearPicker
+            :model-value="filterYear"
+            accent-color="#d03050"
+            placeholder="按年筛选"
+            @update:model-value="setFilterYear"
+          />
         </div>
         <!-- 右侧操作按钮 -->
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
@@ -45,44 +47,16 @@
         </div>
       </div>
 
-      <!-- 费用汇总 -->
-      <div v-if="filteredInvoices.length > 0" class="summary-card">
-        <div class="summary-item">
-          <span style="font-size:22px;">💰</span>
-          <div>
-            <div class="summary-label">总计金额</div>
-            <div class="summary-value" style="color:#d03050;">¥{{ totalAmount }}</div>
-          </div>
-        </div>
-        <div class="summary-item">
-          <span style="font-size:22px;">🧾</span>
-          <div>
-            <div class="summary-label">发票数量</div>
-            <div class="summary-value">{{ filteredInvoices.length }} 张</div>
-          </div>
-        </div>
-        <div class="summary-item">
-          <span style="font-size:22px;">💊</span>
-          <div>
-            <div class="summary-label">自付金额</div>
-            <div class="summary-value" style="color:#e67e22;">¥{{ selfPayAmount }}</div>
-          </div>
-        </div>
-        <div v-if="duplicateCount > 0" class="summary-item" style="background:#fdf6ec; border:1px solid #f5dab1; border-radius:8px; padding:8px 12px;">
-          <span style="font-size:18px;">⚠️</span>
-          <div>
-            <div style="font-size:11px; color:#e6a23c;">疑似重复</div>
-            <div style="font-size:16px; font-weight:700; color:#e6a23c;">{{ duplicateCount }} 张</div>
-          </div>
-        </div>
-        <div v-if="anomalyCount > 0" class="summary-item anomaly-badge">
-          <span style="font-size:18px;">❗</span>
-          <div>
-            <div style="font-size:11px; color:#d03050;">异常提醒</div>
-            <div style="font-size:16px; font-weight:700; color:#d03050;">{{ anomalyCount }} 条</div>
-          </div>
-        </div>
-      </div>
+      <InvoiceSummaryBar
+        v-if="filteredInvoices.length > 0"
+        :total-amount="totalAmount"
+        :self-pay-amount="selfPayAmount"
+        :commercial-amount="commercialTotal"
+        :actual-self-pay-amount="actualSelfPayAmount"
+        :invoice-count="filteredInvoices.length"
+        :duplicate-count="duplicateCount"
+        :anomaly-count="anomalyCount"
+      />
 
       <!-- 发票列表 -->
       <div class="invoice-list">
@@ -104,12 +78,12 @@
                 <span style="color:#e6a23c; font-size:12px; background:#fdf6ec; padding:1px 8px; border-radius:10px; border:1px solid #f5dab1; cursor:help;">⚠️ 疑似重复</span>
               </el-tooltip>
               <!-- 异常标记 -->
-              <el-popover v-if="Array.isArray(inv.items) && getAnomalies(inv).length > 0" placement="top" :width="280" trigger="hover">
+              <el-popover v-if="Array.isArray(inv.items) && getInvoiceAnomalies(inv).length > 0" placement="top" :width="280" trigger="hover">
                 <template #reference>
                   <span style="color:#d03050; font-size:16px; font-weight:700; cursor:pointer;">❗</span>
                 </template>
                 <div>
-                  <div v-for="(a, idx) in getAnomalies(inv)" :key="idx"
+                  <div v-for="(a, idx) in getInvoiceAnomalies(inv)" :key="idx"
                     style="font-size:13px; color:#d03050; padding:4px 0; border-bottom:1px solid #fee;">
                     {{ a }}
                   </div>
@@ -122,6 +96,22 @@
                 title="点击查看关联病历">
                 📋 关联病历 →
               </span>
+              <!-- 商保报销：标签 + 勾选 + 金额 + 保存 -->
+              <span class="commercial-label" title="商保报销状态标签（不可点击）">已由商保报销</span>
+              <el-checkbox
+                :model-value="getCommercialDraft(inv).checked"
+                @change="(val) => onCommercialCheckChange(inv, val)"
+              />
+              <el-input
+                :model-value="getCommercialDraft(inv).amount"
+                :disabled="!getCommercialDraft(inv).checked"
+                type="number"
+                size="small"
+                placeholder="金额"
+                class="commercial-amount-input"
+                @update:model-value="(val) => onCommercialAmountChange(inv, val)"
+              />
+              <el-button size="small" type="success" @click="saveCommercialReimbursement(inv)">保存</el-button>
             </div>
             <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
               <span style="font-size:16px; font-weight:700; color:#d03050;">¥{{ inv.totalAmount || '0.00' }}</span>
@@ -181,50 +171,134 @@
       :patient="linkedRecordPatient"
       :record="linkedRecordRecord"
     />
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
-import { useRouter, useRoute } from 'vue-router';
+import { ref, computed, reactive } from 'vue';
+import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { usePatientsStore } from '@/stores/usePatients';
 import { useInvoiceStore } from '@/stores/useInvoice';
 import { useRecordsStore } from '@/stores/useRecords';
-import { apiRequest, uploadFileToCloud } from '@/api/index';
+import { uploadFileToCloud } from '@/api/files';
+import { processOcrFile } from '@/api/ocr';
+import { createInvoice, deleteInvoice as deleteInvoiceApi } from '@/api/invoices';
+import {
+  extractInvoiceAmounts,
+  extractInvoiceDate,
+  extractInvoiceNumber
+} from '@/utils/invoice-parser';
+import { useDateRangeFilter } from '@/composables/useDateRangeFilter';
+import { useRoutePatientId } from '@/composables/useRoutePatientId';
+import { useInvoiceDuplicates } from '@/composables/invoice/useInvoiceDuplicates';
+import { getInvoiceAnomalies, useInvoiceAnomalyCount } from '@/composables/invoice/useInvoiceAnomalies';
+import AppIcon from '@/components/AppIcon.vue';
+import PatientTabBar from '@/components/common/PatientTabBar.vue';
+import InvoiceSummaryBar from '@/components/invoice/InvoiceSummaryBar.vue';
+import DateRangePicker from '@/components/common/DateRangePicker.vue';
+import YearPicker from '@/components/common/YearPicker.vue';
+import { usePatientScope } from '@/stores/usePatientScope';
 import FilePreviewDialog from '@/components/FilePreviewDialog.vue';
 
 const router = useRouter();
-const route = useRoute();
 const patientsStore = usePatientsStore();
 const invoiceStore = useInvoiceStore();
 const recordsStore = useRecordsStore();
+const patientScope = usePatientScope();
 
-const activePatientId = ref(null);
+const { activePatientId } = useRoutePatientId(() => patientsStore.patients);
 
-onMounted(() => {
-  const pid = route.query.patientId;
-  if (pid) {
-    const id = Number(pid);
-    if (patientsStore.patients.some(p => p.id === id)) {
-      activePatientId.value = id;
-    }
-  }
-});
-const filterDateStart = ref('');
-const filterDateEnd = ref('');
-const dateRangeMonths = ref(0);
+const {
+  filterDateStart,
+  filterDateEnd,
+  filterYear,
+  filteredList: filteredInvoices,
+  setDateRange,
+  setFilterYear,
+  onCustomDateRangeChange,
+  clearFilter,
+  rangeBtnStyle: rangeBtn
+} = useDateRangeFilter(() =>
+  activePatientId.value ? invoiceStore.getPatientInvoices(activePatientId.value) : []
+);
+
+const { duplicateMap, duplicateCount } = useInvoiceDuplicates(filteredInvoices);
+const { anomalyCount } = useInvoiceAnomalyCount(filteredInvoices);
 const previewVisible = ref(false);
 const previewUrl = ref('');
 const previewIsPdf = ref(false);
 
-// ===== Computed =====
-const filteredInvoices = computed(() => {
-  let list = activePatientId.value ? invoiceStore.getPatientInvoices(activePatientId.value) : [];
-  if (filterDateStart.value) list = list.filter(inv => inv.date >= filterDateStart.value);
-  if (filterDateEnd.value) list = list.filter(inv => inv.date <= filterDateEnd.value);
-  return list;
-});
+/** Draft edits for commercial reimbursement before clicking Save */
+const commercialDrafts = reactive({});
+
+function getCommercialDraft(inv) {
+  const key = String(inv.id);
+  if (!commercialDrafts[key]) {
+    commercialDrafts[key] = {
+      checked: !!inv.commercialReimbursed,
+      amount: inv.commercialReimbursed && inv.commercialAmount != null && inv.commercialAmount !== ''
+        ? String(inv.commercialAmount)
+        : ''
+    };
+  }
+  return commercialDrafts[key];
+}
+
+function onCommercialCheckChange(inv, checked) {
+  const draft = getCommercialDraft(inv);
+  draft.checked = !!checked;
+  if (!draft.checked) draft.amount = '';
+}
+
+function onCommercialAmountChange(inv, value) {
+  getCommercialDraft(inv).amount = value == null ? '' : String(value);
+}
+
+function getInvoiceSelfPayCap(inv) {
+  const selfPay = parseFloat(inv.selfPayAmount);
+  if (!Number.isNaN(selfPay) && selfPay > 0) return selfPay;
+  const total = parseFloat(inv.totalAmount);
+  if (!Number.isNaN(total) && total > 0) return total;
+  return 0;
+}
+
+function saveCommercialReimbursement(inv) {
+  const draft = getCommercialDraft(inv);
+  if (!draft.checked) {
+    invoiceStore.updateInvoice({
+      ...inv,
+      commercialReimbursed: false,
+      commercialAmount: '0.00'
+    });
+    draft.amount = '';
+    ElMessage.success('已取消商保报销并保存');
+    return;
+  }
+  const amount = parseFloat(draft.amount);
+  if (Number.isNaN(amount) || amount < 0) {
+    ElMessage.warning('请输入有效的商保报销金额（≥0）');
+    return;
+  }
+  const cap = getInvoiceSelfPayCap(inv);
+  if (cap > 0 && amount > cap) {
+    ElMessage.warning(`商保报销金额不能超过该票自付上限 ¥${cap.toFixed(2)}`);
+    return;
+  }
+  if (cap === 0 && amount > 0) {
+    ElMessage.warning('该发票无自付/总金额，无法填写商保报销');
+    return;
+  }
+  const amountText = amount.toFixed(2);
+  invoiceStore.updateInvoice({
+    ...inv,
+    commercialReimbursed: true,
+    commercialAmount: amountText
+  });
+  draft.amount = amountText;
+  ElMessage.success('商保报销已保存');
+}
 
 const totalAmount = computed(() =>
   filteredInvoices.value.reduce((s, i) => s + parseFloat(i.totalAmount || 0), 0).toFixed(2)
@@ -232,126 +306,20 @@ const totalAmount = computed(() =>
 const selfPayAmount = computed(() =>
   filteredInvoices.value.reduce((s, i) => s + parseFloat(i.selfPayAmount || 0), 0).toFixed(2)
 );
-const anomalyCount = computed(() =>
-  filteredInvoices.value.reduce((s, i) => s + (Array.isArray(i.items) ? getAnomalies(i).length : 0), 0)
+const commercialTotal = computed(() =>
+  filteredInvoices.value
+    .filter(i => i.commercialReimbursed)
+    .reduce((s, i) => s + parseFloat(i.commercialAmount || 0), 0)
+    .toFixed(2)
 );
-
-// ===== Duplicate invoice detection =====
-// Rules:
-// 1. Invoice number (title "发票-XXXX") duplicate → confirmed duplicate (highest priority)
-// 2. Date duplicate AND amount duplicate simultaneously → confirmed duplicate
-// 3. Exclusion: if invoice number exists and is unique → NOT duplicate, even if date+amount match
-const duplicateMap = computed(() => {
-  const map = {};
-  const invoices = filteredInvoices.value;
-
-  // Extract invoice number from title (e.g. "发票-123456" → "123456")
-  const getInvoiceNo = (inv) => {
-    const m = (inv.title || '').match(/^发票-(.+)$/);
-    return m ? m[1].trim() : null;
-  };
-
-  // Step 1: group by invoice number
-  const numberGroups = {};
-  const numberDupSet = new Set(); // ids whose invoice number is duplicated
-  invoices.forEach(inv => {
-    const no = getInvoiceNo(inv);
-    if (no) {
-      if (!numberGroups[no]) numberGroups[no] = [];
-      numberGroups[no].push(inv.id);
-    }
-  });
-  Object.values(numberGroups).filter(g => g.length > 1).forEach(g =>
-    g.forEach(id => { map[id] = 'number'; numberDupSet.add(id); })
-  );
-
-  // Step 2: group by date, group by amount separately, then intersect
-  const dateGroups = {};
-  const amountGroups = {};
-  invoices.forEach(inv => {
-    if (inv.date) {
-      if (!dateGroups[inv.date]) dateGroups[inv.date] = [];
-      dateGroups[inv.date].push(inv.id);
-    }
-    const amt = parseFloat(inv.totalAmount || 0);
-    if (amt > 0) {
-      const amtKey = amt.toFixed(2);
-      if (!amountGroups[amtKey]) amountGroups[amtKey] = [];
-      amountGroups[amtKey].push(inv.id);
-    }
-  });
-  const dateDupIds = new Set();
-  const amountDupIds = new Set();
-  Object.values(dateGroups).filter(g => g.length > 1).forEach(g => g.forEach(id => dateDupIds.add(id)));
-  Object.values(amountGroups).filter(g => g.length > 1).forEach(g => g.forEach(id => amountDupIds.add(id)));
-
-  // Only mark as duplicate if BOTH date and amount are duplicated
-  // Exclusion: if the invoice has a unique invoice number, skip it
-  invoices.forEach(inv => {
-    if (map[inv.id]) return; // already marked by invoice number
-    const no = getInvoiceNo(inv);
-    // If this invoice has an invoice number and it's NOT in numberDupSet → unique number → exclude
-    if (no && !numberDupSet.has(inv.id)) return;
-    // Both date and amount duplicated simultaneously → duplicate
-    if (dateDupIds.has(inv.id) && amountDupIds.has(inv.id)) {
-      map[inv.id] = 'date+amount';
-    }
-  });
-
-  return map;
-});
-const duplicateCount = computed(() => Object.keys(duplicateMap.value).length);
-
-// ===== 异常检测 =====
-const getAnomalies = (invoice) => {
-  const anomalies = [];
-  if (parseFloat(invoice.totalAmount || 0) > 2000) {
-    anomalies.push(`大额费用提醒：本张发票合计 ¥${invoice.totalAmount}`);
-  }
-  // 【修复】确保 items 是数组再调用 forEach
-  const items = Array.isArray(invoice.items) ? invoice.items : [];
-  if (items.length > 0) {
-    const nameCount = {};
-    items.forEach(item => {
-      const name = item?.name?.trim();
-      if (name) nameCount[name] = (nameCount[name] || 0) + 1;
-    });
-    Object.entries(nameCount).forEach(([name, count]) => {
-      if (count > 1) anomalies.push(`同项目重复收费：${name} 出现 ${count} 次`);
-    });
-  }
-  return anomalies;
-};
-
-// ===== 样式 =====
-const sidebarItemStyle = (id) => ({
-  padding: '8px 10px', borderRadius: '6px', cursor: 'pointer', marginBottom: '4px',
-  fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-  background: activePatientId.value === id ? '#fff0f0' : 'transparent',
-  color: activePatientId.value === id ? '#d03050' : '#333',
-  fontWeight: activePatientId.value === id ? '600' : '400',
-  borderLeft: activePatientId.value === id ? '3px solid #d03050' : '3px solid transparent'
-});
-const rangeBtn = (m) => ({
-  padding: '4px 8px', fontSize: '12px', borderRadius: '4px', cursor: 'pointer', border: '1px solid',
-  borderColor: dateRangeMonths.value === m ? '#d03050' : '#ddd',
-  background: dateRangeMonths.value === m ? '#fff0f0' : '#f5f5f5',
-  color: dateRangeMonths.value === m ? '#d03050' : '#666',
-  fontWeight: dateRangeMonths.value === m ? '600' : '400'
+const actualSelfPayAmount = computed(() => {
+  const actual = parseFloat(selfPayAmount.value) - parseFloat(commercialTotal.value);
+  return Math.max(0, actual).toFixed(2);
 });
 
-// ===== 操作 =====
-const switchPatient = (id) => { activePatientId.value = id; };
-const setDateRange = (m) => {
-  dateRangeMonths.value = m;
-  const end = new Date(), start = new Date();
-  start.setMonth(start.getMonth() - m);
-  // 【修复】使用本地日期格式，避免 toISOString 的 UTC 转换问题
-  const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  filterDateEnd.value = fmt(end);
-  filterDateStart.value = fmt(start);
-};
-const clearFilter = () => { filterDateStart.value = ''; filterDateEnd.value = ''; dateRangeMonths.value = 0; };
+const switchPatient = (id) => { activePatientId.value = id; patientScope.setCurrentPatient(id); };
+
+const invoiceRangeBtn = (m) => rangeBtn(m, '#d03050');
 
 // ===== 上传 =====
 const triggerUpload = () => {
@@ -383,7 +351,7 @@ const triggerUpload = () => {
         console.log('[Invoice Upload] Step 2: File uploaded, URL:', fileUrl);
         
         console.log('[Invoice Upload] Step 3: Performing OCR...');
-        const ocrResult = await performOCR(file);
+        const ocrResult = await processOcrFile(file);
         console.log(`发票OCR结果 [${i + 1}/${totalFiles}] [${file.name}]:`, ocrResult.text);
         
         const { totalAmount, selfPayAmount, insuranceAmount, items } = extractInvoiceAmounts(ocrResult.text || '');
@@ -402,6 +370,8 @@ const triggerUpload = () => {
           fileName: file.name, fileType: file.type, fileUrl,
           totalAmount: parseFloat(totalAmount || 0).toFixed(2),
           selfPayAmount: selfPayAmount || '', insuranceAmount: insuranceAmount || '',
+          commercialReimbursed: false,
+          commercialAmount: '0.00',
           items, ocrRawText: ocrResult.text, uploadTime: Date.now()
         };
         // 【修复】同步到后端数据库，字段名与后端实体匹配
@@ -417,15 +387,14 @@ const triggerUpload = () => {
             totalAmount: newInvoice.totalAmount,
             selfPayAmount: newInvoice.selfPayAmount,
             insuranceAmount: newInvoice.insuranceAmount,
+            commercialReimbursed: 0,
+            commercialAmount: 0,
             items: JSON.stringify(newInvoice.items), // 后端 items 是 JSON 字符串
             ocrRawText: newInvoice.ocrRawText,
             uploadTime: new Date(newInvoice.uploadTime).toISOString()
           };
           console.log('[Invoice Upload] Step 8: Backend payload:', backendInvoice);
-          const res = await apiRequest('/invoices', {
-            method: 'POST',
-            body: JSON.stringify(backendInvoice)
-          });
+          const res = await createInvoice(backendInvoice);
           console.log('[Invoice Upload] Step 9: Backend response:', res);
           if (res.code === 200 && res.data) {
             // 使用后端返回的数据（包含生成的ID）
@@ -452,412 +421,12 @@ const triggerUpload = () => {
   input.click();
 };
 
-// ===== OCR（直接上传，后端处理PDF分页）=====
-// NOTE: Multi-page PDF OCR takes ~10min on 2GB server, timeout set to 12min
-const performOCR = async (file, maxRetries = 1) => {
-  const token = localStorage.getItem('emr_token');
-  const formData = new FormData();
-  formData.append('file', file);
-
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 720000); // 12 min timeout
-      const response = await fetch('/api/ocr/process', {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: formData,
-        signal: controller.signal
-      });
-      clearTimeout(timeoutId);
-      if (!response.ok) throw new Error(`OCR HTTP ${response.status}`);
-      const data = await response.json();
-      if (!data.success) throw new Error(data.error || 'OCR失败');
-      return data.data;
-    } catch (err) {
-      // Do NOT retry on timeout/504 — OCR is still processing on server
-      const isTimeout = err.name === 'AbortError' || (err.message && err.message.includes('504'));
-      if (!isTimeout && attempt < maxRetries) {
-        console.warn(`[OCR] 尝试${attempt + 1}失败，${2000 * (attempt + 1)}ms后重试...`, err);
-        await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
-        continue;
-      }
-      throw err;
-    }
-  }
-};
-
-// ===== 发票信息提取（强化版，移植自旧版前端，支持电子发票+医疗收费票据双模式）=====
-
-// 电子发票（增值税发票）专用解析
-const extractElectronicInvoice = (ocrText) => {
-  const lines = ocrText.split('\n').map(l => l.trim()).filter(Boolean);
-  let totalAmount = '';
-  const items = [];
-
-  const cleanAmount = (str) => {
-    const v = parseFloat(str.replace(/[¥￥,，\s]/g, ''));
-    return isNaN(v) ? null : v.toFixed(2);
-  };
-  const extractAmt = (text) => {
-    const m = text.match(/([¥￥]?[\d,，]+\.\d{2})\s*$/);
-    if (m) return cleanAmount(m[1]);
-    return null;
-  };
-  const TAX_EXCLUDE = /税额|免税|税率|征收率|价税合计|合计|大写|小写|备注|发票专用章|开票人|销售方|购买方/;
-  // 【修复】智能提取项目名称：根据*后面内容的特征决定提取方式
-  const cleanItemName = (name) => {
-    const afterStar = name.replace(/^\*[^*]+\*/, '').trim();
-    const match = name.match(/^\*([^*]+)\*/);
-    const inStar = match ? match[1].trim() : '';
-    
-    // 如果*后面的内容包含数字、英文或特殊符号，说明是规格型号，提取*...*中的分类名称
-    if (afterStar && /[\d\w]/.test(afterStar)) {
-      return inStar || name.trim();
-    }
-    // 否则提取*后面的具体产品名称
-    return afterStar || inStar || name.trim();
-  };
-
-  // 【新增】电子税务发票专用：检测表格格式发票（有项目名称、数量、单价、金额等表头）
-  const hasTableHeaders = /项目名称|规格型号|单位|数量|单价|金额/.test(ocrText);
-  console.log('[Electronic Invoice] Table headers detected:', hasTableHeaders);
-
-  if (hasTableHeaders) {
-    // 表格格式：项目名称、数量、单价、金额分行显示
-    let currentName = '';
-    let inItemSection = false;
-    
-    // 扩展金额提取函数，支持更多格式
-    const extractAmtExtended = (text) => {
-      // 匹配 ￥2345.13 或 2345.13
-      const m1 = text.match(/[￥¥]?[\d,，]+\.\d{2}/);
-      if (m1) {
-        const v = parseFloat(m1[0].replace(/[￥¥,，]/g, ''));
-        return isNaN(v) ? null : v.toFixed(2);
-      }
-      // 匹配纯数字（可能是金额）
-      const m2 = text.match(/^[\d,，]+\.\d{2}$/);
-      if (m2) {
-        const v = parseFloat(m2[0].replace(/[,，]/g, ''));
-        return isNaN(v) ? null : v.toFixed(2);
-      }
-      return null;
-    };
-    
-    lines.forEach((line, idx) => {
-      // 检测进入项目明细区域
-      if (!inItemSection && /项目名称/.test(line)) {
-        inItemSection = true;
-        return;
-      }
-      
-      // 检测离开项目明细区域（遇到合计等）
-      if (inItemSection && /合\s*计/.test(line)) {
-        inItemSection = false;
-        return;
-      }
-      
-      if (!inItemSection) return;
-      
-      // 跳过表头行和单位行
-      if (/项目名称|规格型号|单位|数量|单价|金额税率|征收率|税额|支|瓶|盒|袋|粒|片/.test(line)) return;
-      
-      // 检测项目名称行（以*开头）
-      if (/^\*[^*]+\*/.test(line)) {
-        currentName = cleanItemName(line);
-        console.log('[Electronic Invoice] Found item name:', currentName);
-        console.log('[Electronic Invoice] Line content:', line);
-        
-        // 【修复】直接使用价税合计作为项目金额
-        // 电子税务发票的项目金额应该是价税合计，而不是单独的金额
-      }
-    });
-    
-    // 【修复】提取价税合计作为总金额（只在表格格式中）
-    lines.forEach((line, idx) => {
-      if (!totalAmount && /价税合计.*大写/.test(line)) {
-        const nextLine = lines[idx + 1];
-        if (nextLine && /[（(]小写[)）]/.test(nextLine)) {
-          const amt = extractAmt(nextLine);
-          if (amt) {
-            totalAmount = amt;
-            console.log('[Electronic Invoice] Tax total amount found:', totalAmount);
-          }
-        }
-      }
-      if (!totalAmount && /[（(]小写[)）].*￥/.test(line)) {
-        const amt = extractAmt(line);
-        if (amt) {
-          totalAmount = amt;
-          console.log('[Electronic Invoice] Tax total amount found:', totalAmount);
-        }
-      }
-    });
-    
-    // 【修复】将项目名称和价税合计组合
-    console.log('[Electronic Invoice] Before items push - currentName:', currentName, 'totalAmount:', totalAmount);
-    if (currentName && totalAmount) {
-      items.push({ name: currentName, amount: totalAmount });
-      console.log('[Electronic Invoice] Table item extracted:', currentName, totalAmount);
-    } else {
-      console.log('[Electronic Invoice] Items push skipped - currentName:', currentName, 'totalAmount:', totalAmount);
-    }
-    
-    // 【修复】确保selfPayAmount是总金额（含税），而不是排除税额
-    const selfPayAmount = totalAmount;
-    
-    return { totalAmount, selfPayAmount: selfPayAmount || totalAmount, insuranceAmount: '0.00', items };
-  } else {
-    // 原有逻辑：单行格式
-    lines.forEach((line, idx) => {
-      if (!totalAmount && /价税合计.*大写/.test(line)) {
-        const nextLine = lines[idx + 1];
-        if (nextLine && /[（(]小写[)）]/.test(nextLine)) {
-          const amt = extractAmt(nextLine);
-          if (amt) totalAmount = amt;
-        }
-      }
-      if (!totalAmount && /[（(]小写[)）].*￥/.test(line)) {
-        const amt = extractAmt(line);
-        if (amt) totalAmount = amt;
-      }
-
-      // 【修复】排除中文大写金额（如"壹仟贰佰捌拾肆圆整"）被误识别为项目名称
-      const isChineseAmount = /^[零一二三四五六七八九十百千万亿圆整]+$/.test(line);
-      if (isChineseAmount) return;
-
-      const hasTaxCode = /^\*[^*]+\*/.test(line);
-      if (hasTaxCode && !TAX_EXCLUDE.test(line)) {
-        let itemName = cleanItemName(line.split(/\s+/)[0] || line);
-        const nextIdx = idx + 1;
-        if (nextIdx < lines.length) {
-          const nextLine = lines[nextIdx].trim();
-          if (/^[\u4e00-\u9fa5]/.test(nextLine) && !/^\*[^*]+\*/.test(nextLine) &&
-              !/^\d/.test(nextLine) && !/^(数量|单价|金额|税率|税额|合计|支|瓶|盒|袋|粒|片)$/.test(nextLine)) {
-            itemName += nextLine;
-          }
-        }
-        const SKIP_KEYWORDS = /^(数量|单价|金额税率|征收率|税额|支|瓶|盒|袋|粒|片)$/;
-        for (let i = idx + 1; i <= idx + 5 && i < lines.length; i++) {
-          const nextLine = lines[i].trim();
-          if (/^\*[^*]+\*/.test(nextLine) || /合计|税额/.test(nextLine)) break;
-          if (SKIP_KEYWORDS.test(nextLine) || /%/.test(nextLine)) continue;
-          if (/^\d{8,}$/.test(nextLine.replace(/\./g, ''))) continue;
-          const amt = extractAmt(nextLine);
-          if (amt && parseFloat(amt) > 0) { items.push({ name: itemName, amount: amt }); break; }
-        }
-      }
-    });
-  }
-
-  return { totalAmount, selfPayAmount: totalAmount, insuranceAmount: '0.00', items };
-};
-
-const extractInvoiceAmounts = (ocrText) => {
-  if (!ocrText) return { totalAmount: '', selfPayAmount: '', insuranceAmount: '', items: [] };
-
-  // Normalize OCR artifacts: remove extra spaces in numbers
-  // "2, 826. 00" → "2,826.00", "960. 00" → "960.00"
-  ocrText = ocrText.replace(/(\d),\s+(\d)/g, '$1,$2');
-  ocrText = ocrText.replace(/(\d)\.\s+(\d)/g, '$1.$2');
-
-  // 检测是否为电子发票（增值税发票）
-  const isElectronicInvoice = /电子发票|普用发票|专用发票|增值税发票|国家税务总局|税率|税额|价税合计/.test(ocrText);
-  if (isElectronicInvoice) {
-    console.log('[OCR] 检测到电子发票格式');
-    return extractElectronicInvoice(ocrText);
-  }
-
-  // 截取备注之前的内容（备注后为支付明细，不提取项目）
-  const cutoff1 = ocrText.search(/^备注[：:]/m);
-  const cutoff2 = ocrText.search(/收款单位/);
-  const firstPageCutoff = cutoff1 > 0 ? cutoff1 : (cutoff2 > 0 ? cutoff2 : -1);
-  const firstPageText = firstPageCutoff > 0 ? ocrText.slice(0, firstPageCutoff) : ocrText;
-  const lines = firstPageText.split('\n').map(l => l.trim()).filter(Boolean);
-
-  let totalAmount = '';
-  let insuranceAmount = '';
-  let selfPayCandidates = [];
-  const items = [];
-
-  const cleanAmount = (str) => parseFloat(str.replace(/[¥￥,，\s]/g, '')).toFixed(2);
-  const extractAmt = (text) => {
-    const m = text.match(/[：:]\s*([¥￥]?[\d,，]+\.?\d*)\s*$/);
-    if (m) { const v = cleanAmount(m[1]); if (!isNaN(v) && parseFloat(v) >= 0) return v; }
-    const m2 = text.match(/([¥￥]?[\d,，]+\.\d{2})\s*$/);
-    if (m2) { const v = cleanAmount(m2[1]); if (!isNaN(v) && parseFloat(v) > 0) return v; }
-    return null;
-  };
-  const isAmountOnlyLine = (line) => /^[¥￥]?[\d,，]+\.?\d*$/.test(line);
-  const findAmountAfter = (idx) => {
-    for (let i = idx + 1; i <= idx + 5 && i < lines.length; i++) {
-      if (isAmountOnlyLine(lines[i])) {
-        const v = cleanAmount(lines[i]);
-        if (!isNaN(v) && parseFloat(v) > 0) return v;
-      }
-      const m = lines[i].match(/([¥￥]?[\d,，]+\.\d{2})/);
-      if (m) { const v = cleanAmount(m[1]); if (!isNaN(v) && parseFloat(v) > 0) return v; }
-    }
-    return null;
-  };
-
-  const EXCLUDE_PATTERN = /余额|账户余额|个人医保账户余额|个人账户余额/;
-
-  lines.forEach((line, idx) => {
-    if (EXCLUDE_PATTERN.test(line)) return;
-
-    // 合计金额
-    if (!totalAmount && /^合计$|^总计$/.test(line)) {
-      const after = findAmountAfter(idx);
-      if (after) totalAmount = after;
-    } else if (!totalAmount && /合计|总计/.test(line) && !/小计|分计/.test(line)) {
-      const amt = extractAmt(line);
-      if (amt && parseFloat(amt) > 0) totalAmount = amt;
-      else { const after = findAmountAfter(idx); if (after) totalAmount = after; }
-    }
-
-    // 个人自付（收集所有候选，取最大值）
-    const isSelfPayCandidate = /个人自付|个人自费|个人现金支付/.test(line) && !/个人账户/.test(line);
-    if (isSelfPayCandidate) {
-      const amt = extractAmt(line) ?? findAmountAfter(idx);
-      if (amt !== null) { const v = parseFloat(amt); if (v > 0) selfPayCandidates.push(v); }
-    }
-
-    // 医保统筹基金支付
-    // 【修复】明确提取到金额（包括0.00）时直接记录，不再向后找（避免误识别后续行的合计金额）
-    if (!insuranceAmount && /医保统筹基金支付|统筹基金支付|医保支付金额/.test(line)) {
-      const amt = extractAmt(line);
-      if (amt !== null) {
-        insuranceAmount = amt; // 0.00 也直接记录，表示明确为0
-      } else {
-        const after = findAmountAfter(idx);
-        if (after) insuranceAmount = after;
-      }
-    }
-
-    // 项目明细
-    const ITEM_EXCLUDE = /合计|总计|小计|日期|时间|编号|发票|收款|章|支付|余额|保险|备注|单位|数量|自费|自付|项目名称|大写|小写/;
-    const KNOWN_CATEGORIES = /^(床位费|诊察费|检查费|化验费|治疗费|手术费|护理费|西药费|中药费|中成药|其他住院费|材料费|输血费|氧气费|放射费|放疗费|理疗费|超声费|药费|挂号费|急诊费)$/;
-    const MEDICAL_SUFFIX = /费|药|器|材|疗|护|查|验|射|氧|血|诊|号|急$/;
-
-    // Match: "项目名 [数量] 金额" — capture last amount on the line (skip quantity digits)
-    const singleLineMatch = line.match(/^([\u4e00-\u9fa5][^\d\n]{1,20}?)\s+(?:\d{1,3}\s+)?[¥￥]?\s*([\d,，]+\.\d{2})\s*(?:[\d.;:\s]*)?$/);
-    if (singleLineMatch) {
-      const itemName = singleLineMatch[1].trim();
-      if (!ITEM_EXCLUDE.test(itemName)) {
-        const amount = parseFloat(singleLineMatch[2].replace(/[,，]/g, '')).toFixed(2);
-        if (parseFloat(amount) > 0) items.push({ name: itemName.replace(/[：:]\s*$/, ''), amount });
-      }
-    }
-
-    const isKnownCategory = KNOWN_CATEGORIES.test(line);
-    const isPureChinese = /^[\u4e00-\u9fa5]{2,8}费$/.test(line) ||
-                          (/^[\u4e00-\u9fa5]{2,6}$/.test(line) && MEDICAL_SUFFIX.test(line));
-    if ((isKnownCategory || isPureChinese) && !ITEM_EXCLUDE.test(line)) {
-      let foundAmt = null;
-      let accumulated = '';
-      for (let k = idx + 1; k <= idx + 4 && k < lines.length; k++) {
-        const nextLine = lines[k].trim();
-        if (KNOWN_CATEGORIES.test(nextLine)) break;
-        if (/\d+\.\d+\//.test(nextLine)) continue;
-        // Skip quantity-only lines (e.g. "1", "10", "2次") to prevent "1" + "19.00" → "119.00"
-        if (/^\d{1,3}[次天支瓶盒袋粒片个只根包套件张条管]?$/.test(nextLine)) continue;
-        accumulated += nextLine;
-        const amtMatch = accumulated.match(/([\d,，\s]+\.\d{2})/);
-        if (amtMatch) {
-          const v = parseFloat(amtMatch[1].replace(/[,，\s]/g, ''));
-          if (v > 0) { foundAmt = v.toFixed(2); break; }
-        }
-      }
-      if (foundAmt && !items.find(it => it.name === line)) items.push({ name: line, amount: foundAmt });
-    }
-  });
-
-  // 全文兜底补提取（备注后也可能有金额）
-  if (!selfPayCandidates.length || !insuranceAmount || !totalAmount) {
-    const fullLines = ocrText.split('\n').map(l => l.trim()).filter(Boolean);
-    fullLines.forEach((line, idx) => {
-      if (/余额|账户余额/.test(line)) return;
-      // 兜底：合计金额
-      if (!totalAmount && /合计|总计/.test(line) && !/小计|分计/.test(line)) {
-        const amt = extractAmt(line) ?? findAmountAfterFull(idx, fullLines);
-        if (amt && parseFloat(amt) > 0) totalAmount = amt;
-      }
-      // 兜底：自付金额（继续收集候选）
-      if (/个人自付|个人自费|个人现金支付/.test(line) && !/个人账户/.test(line)) {
-        const amt = extractAmt(line) ?? findAmountAfterFull(idx, fullLines);
-        if (amt && parseFloat(amt) > 0) selfPayCandidates.push(parseFloat(amt));
-      }
-      // 兜底：医保金额
-      if (!insuranceAmount && /医保统筹基金支付|统筹基金支付/.test(line)) {
-        const amt = extractAmt(line) ?? findAmountAfterFull(idx, fullLines);
-        if (amt && parseFloat(amt) > 0) insuranceAmount = amt;
-      }
-    });
-  }
-
-  // 【修复】添加全文用的findAmountAfter函数
-  function findAmountAfterFull(idx, fullLines) {
-    for (let i = idx + 1; i <= idx + 5 && i < fullLines.length; i++) {
-      if (isAmountOnlyLine(fullLines[i])) {
-        const v = cleanAmount(fullLines[i]);
-        if (!isNaN(v) && parseFloat(v) > 0) return v;
-      }
-      const m = fullLines[i].match(/([¥￥]?[\d,，]+\.\d{2})/);
-      if (m) { const v = cleanAmount(m[1]); if (!isNaN(v) && parseFloat(v) > 0) return v; }
-    }
-    return null;
-  }
-
-  // 计算最终自付金额（取最大非零值）
-  const finalSelfPay = selfPayCandidates.length > 0 ? Math.max(...selfPayCandidates).toFixed(2) : '';
-  console.log('[extractInvoiceAmounts] Result:', { totalAmount, finalSelfPay, insuranceAmount, items: items.length });
-  return { totalAmount, selfPayAmount: finalSelfPay, insuranceAmount, items };
-};
-
-const extractInvoiceDate = (text, dates, filename) => {
-  if (text) {
-    // 优先识别"开票日期"、"发票日期"、"日期"关键词后的日期
-    const lines = text.split('\n');
-    for (const line of lines) {
-      if (/开票日期|发票日期|日期/.test(line)) {
-        const m = line.match(/(\d{4})[年\-\/](\d{1,2})[月\-\/](\d{1,2})/);
-        if (m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
-      }
-    }
-    // 兜底：全文首个日期
-    const m = text.match(/(\d{4})[-\/年](\d{1,2})[-\/月](\d{1,2})/);
-    if (m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
-  }
-  if (dates?.length) return dates[0];
-  const fm = filename?.match(/(\d{4})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])/);
-  return fm ? `${fm[1]}-${fm[2]}-${fm[3]}` : new Date().toISOString().split('T')[0];
-};
-
-const extractInvoiceNumber = (text) => {
-  if (!text) return null;
-  const lines = text.split('\n');
-  for (const line of lines) {
-    // 医疗收费票据：门诊号/住院号/票据号码/收据号码
-    const medicalMatch = line.match(/(?:门诊号|住院号|票据号码|收据号码)[：:]\s*(\d+)/);
-    if (medicalMatch) return medicalMatch[1];
-    // 电子发票：20位发票号码
-    const electronicMatch = line.match(/发票号码[：:]\s*(\d{20})/);
-    if (electronicMatch) return electronicMatch[1];
-    // 通用：10-20位
-    const genericMatch = line.match(/(?:发票号码|票号|编号)[：:]\s*(\d{10,20})/);
-    if (genericMatch) return genericMatch[1];
-  }
-  return null;
-};
-
 // ===== 删除/解析 =====
 // 底层删除（不含确认弹窗），供单张和批量共用
 const _doDeleteInvoice = async (invoiceId) => {
   const inv = invoiceStore.invoices.find(i => i.id === invoiceId);
   if (inv?.backendId) {
-    try { await apiRequest(`/invoices/${inv.backendId}`, { method: 'DELETE' }); } catch (_) {}
+    try { await deleteInvoiceApi(inv.backendId); } catch (_) {}
   }
   invoiceStore.deleteInvoice(invoiceId);
 };
@@ -1058,66 +627,43 @@ const jumpToLinkedRecord = (patientId, invoiceDate) => {
 </script>
 
 <style scoped>
-.invoice-layout {
-  display: flex;
-  gap: 0.5rem;
-  height: calc(100vh - 56px);
-  overflow: hidden;
-  padding: 0.75rem 1rem 0.5rem;
-  background: #f5f5f5;
-}
-.patient-sidebar {
-  width: 140px;
-  flex-shrink: 0;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  padding: 0.75rem;
-  overflow-y: auto;
-}
-.sidebar-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #666;
-  margin-bottom: 0.75rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid #eee;
-}
 .invoice-main {
-  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  overflow: hidden;
+  gap: 0.75rem;
 }
 .toolbar-card {
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  padding: 0.6rem 1rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 0.5rem;
-  flex-shrink: 0;
+  padding: 0.25rem 0 0.75rem;
+  border-bottom: 1px solid #f0f0f0;
 }
-.summary-card {
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  padding: 0.6rem 1rem;
+.toolbar-filters {
   display: flex;
-  gap: 1.5rem;
   align-items: center;
+  gap: 10px;
   flex-wrap: wrap;
-  flex-shrink: 0;
+}
+.range-quick-btns {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.range-quick-btns button {
+  padding: 5px 12px;
+  font-size: 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
 .summary-item { display: flex; align-items: center; gap: 8px; }
 .summary-label { font-size: 11px; color: #888; }
 .summary-value { font-size: 18px; font-weight: 700; color: #333; }
 .anomaly-badge { background: #fff0f0; padding: 6px 14px; border-radius: 8px; border: 1px solid #ffcdd2; }
-.invoice-list { flex: 1; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow-y: auto; padding: 0.75rem; }
+.invoice-list { display: flex; flex-direction: column; padding: 0.25rem 0; }
 .invoice-card {
   border: 1px solid #eee;
   border-radius: 8px;
@@ -1137,10 +683,6 @@ const jumpToLinkedRecord = (patientId, invoiceDate) => {
   border-bottom: 1px solid #eee;
 }
 .invoice-empty {
-  flex: 1;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1148,28 +690,11 @@ const jumpToLinkedRecord = (patientId, invoiceDate) => {
   color: #888;
   gap: 1rem;
   font-size: 1.1rem;
+  padding: 3rem 0;
 }
 
 /* 移动端适配 */
 @media (max-width: 768px) {
-  .invoice-layout {
-    flex-direction: column;
-    height: auto;
-    min-height: calc(100vh - 56px);
-    padding: 0.5rem;
-    gap: 0.4rem;
-  }
-  .patient-sidebar {
-    width: auto;
-    display: flex;
-    flex-direction: row;
-    gap: 6px;
-    padding: 0.5rem;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-  .patient-sidebar::-webkit-scrollbar { display: none; }
-  .sidebar-title { display: none; } /* 小屏幕隐藏标题 */
   .invoice-main { min-height: 400px; }
   .toolbar-card {
     flex-direction: column;
@@ -1194,20 +719,15 @@ const jumpToLinkedRecord = (patientId, invoiceDate) => {
   .invoice-header { flex-direction: column; align-items: flex-start; gap: 6px; }
 }
 
-/* ===== Step1: 患者侧边栏Tab横向滚动（已有，补强） ===== */
-@media (max-width: 768px) {
-  .patient-sidebar { flex-wrap: nowrap !important; }
-}
-
-/* ===== Step2: 工具栏日期输入小屏换行 ===== */
+/* ===== 工具栏小屏换行 ===== */
 @media (max-width: 480px) {
-  .toolbar-card > div:first-child {
-    flex-direction: column !important;
-    align-items: stretch !important;
-  }
-  .toolbar-card input[type="date"] {
+  .toolbar-filters {
+    flex-direction: column;
+    align-items: stretch;
     width: 100%;
-    flex: 1;
+  }
+  .range-quick-btns {
+    justify-content: flex-start;
   }
   .toolbar-card > div:last-child {
     flex-wrap: wrap !important;
@@ -1217,5 +737,20 @@ const jumpToLinkedRecord = (patientId, invoiceDate) => {
     flex: 1;
     min-width: 0;
   }
+}
+
+.commercial-label {
+  font-size: 11px;
+  background: #e8f5e9;
+  color: #2e7d32;
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid #c8e6c9;
+  user-select: none;
+  cursor: default;
+  pointer-events: none;
+}
+.commercial-amount-input {
+  width: 100px;
 }
 </style>

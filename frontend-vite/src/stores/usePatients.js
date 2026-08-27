@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { reactive, ref } from 'vue';
-import { apiRequest } from '@/api/index';
+import { fetchPatients, createPatient, updatePatient as apiUpdatePatient, deletePatient as apiDeletePatient } from '@/api/patients';
 import { useAuthStore } from './useAuth';
 import { generateId } from '@/utils/index';
 
@@ -26,7 +26,7 @@ export const usePatientsStore = defineStore('patients', () => {
 
   const loadFromBackend = async () => {
     if (authStore.isDemoMode) return;
-    const res = await apiRequest('/patients?page=1&size=9999');
+    const res = await fetchPatients();
     if (res.code === 200 && res.data?.records) {
       const list = res.data.records.map(p => ({
         id: p.id, patientNo: p.patientNo, name: p.name,
@@ -47,14 +47,11 @@ export const usePatientsStore = defineStore('patients', () => {
     save();
     if (!authStore.isDemoMode) {
       try {
-        const res = await apiRequest('/patients', {
-          method: 'POST',
-          body: JSON.stringify({
-            name: form.name, gender: form.gender, birthDate: form.birthDate,
-            phone: form.phone, idCard: form.idCard, address: form.address,
-            emergencyContact: form.emergencyContact, emergencyPhone: form.emergencyPhone,
-            allergyHistory: form.allergyHistory, medicalHistory: form.medicalHistory
-          })
+        const res = await createPatient({
+          name: form.name, gender: form.gender, birthDate: form.birthDate,
+          phone: form.phone, idCard: form.idCard, address: form.address,
+          emergencyContact: form.emergencyContact, emergencyPhone: form.emergencyPhone,
+          allergyHistory: form.allergyHistory, medicalHistory: form.medicalHistory
         });
         if (res.code === 200 && res.data?.id) {
           patient.id = res.data.id;
@@ -81,10 +78,7 @@ export const usePatientsStore = defineStore('patients', () => {
           medicalHistory: updatedPatient.medicalHistory,
           avatarUrl: _extractUrl(updatedPatient.avatarUrl || updatedPatient.avatar || '')
         };
-        await apiRequest(`/patients/${updatedPatient.id}`, {
-          method: 'PUT',
-          body: JSON.stringify(payload)
-        });
+        await apiUpdatePatient(updatedPatient.id, payload);
       } catch (e) { console.warn('[Patients] Backend update failed:', e); }
     }
   };
@@ -93,7 +87,7 @@ export const usePatientsStore = defineStore('patients', () => {
     const idx = patients.findIndex(p => p.id === patientId);
     if (idx !== -1) { patients.splice(idx, 1); save(); }
     if (!authStore.isDemoMode) {
-      try { await apiRequest(`/patients/${patientId}`, { method: 'DELETE' }); }
+      try { await apiDeletePatient(patientId); }
       catch (e) { console.warn('[Patients] Backend delete failed:', e); }
     }
   };

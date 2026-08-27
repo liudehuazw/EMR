@@ -19,6 +19,24 @@ spring:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: GMT+8
 
+  # Redis 缓存配置（环境变量注入，来自 /opt/emr.env）
+  redis:
+    host: ${REDIS_HOST:127.0.0.1}
+    port: ${REDIS_PORT:26739}
+    password: ${REDIS_PASSWORD:}
+    timeout: 3000ms
+    database: 0
+
+# 缓存配置（生产环境TTL）
+cache:
+  ttl:
+    patients: 300
+    lab-reports: 300
+    imaging-reports: 300
+    invoices: 300
+    medical-records: 300
+    users: 1800
+
 # MyBatis-Plus configuration
 mybatis-plus:
   configuration:
@@ -32,7 +50,7 @@ mybatis-plus:
 
 # JWT configuration
 jwt:
-  secret: ${JWT_SECRET:emr-secret-key-2024-medical-record-system}
+  secret: ${JWT_SECRET}
   expiration: 86400000  # 24 hours
 
 # File upload configuration
@@ -49,10 +67,10 @@ ocr:
 # Zhipu AI configuration
 zhipu:
   ai:
-    api-key: ${ZHIPU_API_KEY}
-    api-url: https://open.bigmodel.cn/api/paas/v4/chat/completions
-    model: glm-4.7-flash
-    timeout: 60000
+    api-key: ${DEEPSEEK_API_KEY}
+    api-url: https://api.deepseek.com/v1/chat/completions
+    model: deepseek-v4-flash
+    timeout: ${DEEPSEEK_API_KEY_TIMEOUT:300000}
 
 # Alibaba Cloud OSS configuration
 aliyun:
@@ -66,7 +84,14 @@ aliyun:
 logging:
   level:
     com.medical.emr: INFO
+    io.lettuce: DEBUG
+    org.springframework.data.redis: DEBUG
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
   file:
     name: /opt/logs/emr.log
+  logback:
+    rollingpolicy:
+      max-history: 30
+      total-size-cap: 2GB
+      clean-history-on-start: true

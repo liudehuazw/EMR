@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
-import { API_BASE_URL } from '@/api/index';
+import { loginApi, changePasswordApi } from '@/api/auth';
 import router from '@/router';
 
 export const useAuthStore = defineStore('auth', () => {
@@ -64,15 +64,7 @@ export const useAuthStore = defineStore('auth', () => {
       }
 
       // Real backend login
-      const result = await fetch(`${API_BASE_URL}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: loginForm.value.username,
-          password: loginForm.value.password
-        })
-      });
-      const data = await result.json();
+      const data = await loginApi(loginForm.value.username, loginForm.value.password);
       if (data.code !== 200) {
         return { error: data.message || '用户名或密码错误' };
       }
@@ -117,16 +109,7 @@ export const useAuthStore = defineStore('auth', () => {
    * @param {string} newPwd
    */
   const changePassword = async (oldPwd, newPwd) => {
-    const token = localStorage.getItem('emr_token');
-    const response = await fetch(`${API_BASE_URL}/auth/change-password`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({ oldPassword: oldPwd, newPassword: newPwd })
-    });
-    const data = await response.json();
+    const data = await changePasswordApi(oldPwd, newPwd);
     if (data.code !== 200) throw new Error(data.message || '修改失败');
     return true;
   };

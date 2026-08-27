@@ -1,0 +1,18 @@
+# Local build & deploy example (copy to deploy-local.ps1 and fill in your server)
+
+$ErrorActionPreference = "Stop"
+Set-Location $PSScriptRoot
+
+$SERVER = "user@your-server-ip"
+$REMOTE_DIR = "/var/www/html"
+$DIST_DIR = "dist"
+
+Write-Host "=== [1/2] Building ===" -ForegroundColor Cyan
+npm run build
+if ($LASTEXITCODE -ne 0) { exit 1 }
+
+Write-Host "=== [2/2] Uploading ===" -ForegroundColor Cyan
+scp "$DIST_DIR/index.html" "${SERVER}:${REMOTE_DIR}/index.html"
+scp -r "$DIST_DIR/assets" "${SERVER}:${REMOTE_DIR}/"
+
+Write-Host "=== Deploy complete ===" -ForegroundColor Green

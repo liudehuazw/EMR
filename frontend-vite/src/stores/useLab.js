@@ -1,6 +1,11 @@
 import { defineStore } from 'pinia';
 import { reactive, ref, computed } from 'vue';
-import { apiRequest } from '@/api/index';
+import {
+  fetchLabReportsByPatient,
+  createLabReport,
+  updateLabReport,
+  deleteLabReport
+} from '@/api/lab-reports';
 import { useAuthStore } from './useAuth';
 
 export const useLabStore = defineStore('lab', () => {
@@ -38,7 +43,7 @@ export const useLabStore = defineStore('lab', () => {
     const all = [];
     for (const p of patients) {
       try {
-        const res = await apiRequest(`/lab-reports/patient/${p.id}`);
+        const res = await fetchLabReportsByPatient(p.id);
         if (res.code === 200 && res.data) {
           all.push(...res.data.map(r => ({
             ...r,
@@ -76,7 +81,7 @@ export const useLabStore = defineStore('lab', () => {
           ocrConfidence: report.ocrConfidence,
           tableData: JSON.stringify(Array.isArray(report.tableData) ? report.tableData : [])
         };
-        const res = await apiRequest('/lab-reports', { method: 'POST', body: JSON.stringify(payload) });
+        const res = await createLabReport(payload);
         if (res.code === 200 && res.data?.id) {
           const idx = labReports.findIndex(r => r.id === report.id);
           if (idx !== -1) labReports[idx].backendId = res.data.id;
@@ -103,7 +108,7 @@ export const useLabStore = defineStore('lab', () => {
           aiAnalysis: updated.aiAnalysis,
           tableData: JSON.stringify(Array.isArray(updated.tableData) ? updated.tableData : [])
         };
-        await apiRequest(`/lab-reports/${updated.backendId}`, { method: 'PUT', body: JSON.stringify(payload) });
+        await updateLabReport(updated.backendId, payload);
       } catch (e) { console.warn('[Lab] Update backend failed:', e); }
     }
   };
@@ -113,7 +118,7 @@ export const useLabStore = defineStore('lab', () => {
     if (idx !== -1) {
       const bid = labReports[idx].backendId;
       if (bid) {
-        try { await apiRequest(`/lab-reports/${bid}`, { method: 'DELETE' }); } catch (e) { console.warn('[Lab] Delete from backend failed:', e); }
+        try { await deleteLabReport(bid); } catch (e) { console.warn('[Lab] Delete from backend failed:', e); }
       }
       labReports.splice(idx, 1);
       save();

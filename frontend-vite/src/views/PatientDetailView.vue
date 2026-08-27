@@ -25,7 +25,7 @@
           <el-button type="warning" @click="router.push({name:'Records', query:{patientId: patient.id}})">📋 查看病历统计</el-button>
           <el-button type="danger"  @click="router.push({name:'Lab', query:{patientId: patient.id}})">🔬 查看检验报告</el-button>
           <el-button type="primary" @click="router.push({name:'Imaging', query:{patientId: patient.id}})">🏥 查看影像报告</el-button>
-          <el-button @click="router.push({name:'Invoice', query:{patientId: patient.id}})">💰 查看发票统计</el-button>
+          <el-button type="success" @click="router.push({name:'Invoice', query:{patientId: patient.id}})">💰 查看发票统计</el-button>
         </div>
       </div>
 

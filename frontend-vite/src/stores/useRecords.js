@@ -1,6 +1,10 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
-import { apiRequest } from '@/api/index';
+import {
+  fetchMedicalRecordsByPatient,
+  createMedicalRecord,
+  updateMedicalRecord
+} from '@/api/medical-records';
 import { useAuthStore } from './useAuth';
 
 export const useRecordsStore = defineStore('records', () => {
@@ -26,7 +30,7 @@ export const useRecordsStore = defineStore('records', () => {
     const all = [];
     for (const p of patients) {
       try {
-        const res = await apiRequest(`/medical-records/patient/${p.id}`);
+        const res = await fetchMedicalRecordsByPatient(p.id);
         if (res.code === 200 && res.data) {
           all.push(...res.data.map(r => ({
             id: r.id, backendId: r.id, patientId: r.patientId,
@@ -64,7 +68,7 @@ export const useRecordsStore = defineStore('records', () => {
         notes: record.notes || '',
         files: JSON.stringify(Array.isArray(record.files) ? record.files : [])
       };
-      const res = await apiRequest('/medical-records', { method: 'POST', body: JSON.stringify(payload) });
+      const res = await createMedicalRecord(payload);
       if (res.code === 200 && res.data?.id) {
         const idx = medicalRecords.value.findIndex(r => r.id === record.id);
         if (idx !== -1) medicalRecords.value[idx].backendId = res.data.id;
@@ -91,7 +95,7 @@ export const useRecordsStore = defineStore('records', () => {
         notes: record.notes || '',
         files: JSON.stringify(Array.isArray(record.files) ? record.files : [])
       };
-      await apiRequest(`/medical-records/${record.backendId}`, { method: 'PUT', body: JSON.stringify(payload) });
+      await updateMedicalRecord(record.backendId, payload);
       console.log('[Records] Synced to backend (PUT):', record.backendId);
     } catch (e) { console.warn('[Records] Backend update failed:', e); }
   };

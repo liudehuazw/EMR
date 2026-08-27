@@ -1,0 +1,18 @@
+# Deploy script example (copy to deploy.ps1 and fill in your server)
+# Usage: .\deploy.ps1
+
+$ErrorActionPreference = "Stop"
+Set-Location $PSScriptRoot
+
+$server = "user@your-server-ip"
+$remotePath = "/var/www/html"
+
+Write-Host "Step 1: Building..." -ForegroundColor Cyan
+npm run build
+if ($LASTEXITCODE -ne 0) { Write-Host "Build failed" -ForegroundColor Red; exit 1 }
+
+Write-Host "Step 2: Uploading..." -ForegroundColor Cyan
+scp -r dist/* "${server}:${remotePath}/"
+if ($LASTEXITCODE -ne 0) { exit 1 }
+
+Write-Host "Deploy complete!" -ForegroundColor Green

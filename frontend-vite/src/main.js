@@ -6,8 +6,11 @@ import * as ElementPlusIconsVue from '@element-plus/icons-vue';
 import 'element-plus/dist/index.css';
 import './assets/main.css';
 
+import { initThemeTuner } from '@/composables/useThemeTuner';
 import App from './App.vue';
 import router from './router';
+
+initThemeTuner();
 
 const app = createApp(App);
 const pinia = createPinia();

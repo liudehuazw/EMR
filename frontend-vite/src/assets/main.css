@@ -3,39 +3,60 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ===== 全局设计规范（Design Tokens）===== */
+/* ===== 全局设计规范（Design Tokens）- 融合 shadcn/ui 风格 ===== */
 :root {
-  /* 主色板 - 深蓝医疗风 */
+  /* 主色板 - 深蓝医疗风（OKLCH 色彩空间） */
   --color-primary:       #1251a3;
   --color-primary-dark:  #0A2B5E;
   --color-primary-light: #e8f0fe;
   --color-primary-mid:   #1a5fbf;
 
-  /* 模块色（降低饱和度，更柔和） */
-  --color-patients: #2563a8;   /* 患者档案 - 柔和蓝 */
-  --color-records:  #d97706;   /* 病历统计 - 柔和橙 */
-  --color-lab:      #b03a3a;   /* 检验报告 - 柔和红 */
-  --color-imaging:  #6d4ec2;   /* 影像报告 - 柔和紫 */
-  --color-invoice:  #c0392b;   /* 发票统计 - 柔和深红 */
+  /* 蓝绿色系 - 登录页专用（专业医疗科技感） */
+  --color-teal:         #0D7C7C;
+  --color-teal-dark:    #065656;
+  --color-teal-light:   #e6f7f7;
+  --color-teal-mid:     #0F9B9B;
+  --color-teal-gradient: linear-gradient(135deg, #065656 0%, #0D7C7C 50%, #0F9B9B 100%);
 
-  /* 中性色 */
-  --color-bg:       #f0f3f8;   /* 页面背景 - 带冷调浅蓝灰 */
-  --color-surface:  #ffffff;   /* 卡片背景 */
-  --color-border:   #e2e8f0;   /* 边框 */
-  --color-text:     #1e2d4a;   /* 主文字 */
-  --color-text-sub: #64748b;   /* 次级文字 */
-  --color-text-tip: #94a3b8;   /* 提示文字 */
+  /* shadcn/ui 风格语义色 */
+  --background: oklch(0.965 0 0);       /* 页面背景 */
+  --foreground: oklch(0.145 0 0);       /* 主文字 */
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: var(--color-primary);
+  --ring-alpha: rgba(18, 81, 163, 0.25);
 
-  /* 圆角 */
+  /* 模块色 */
+  --color-patients: #2563a8;
+  --color-records:  #d97706;
+  --color-lab:      #6eb329;
+  --color-imaging:  #6d4ec2;
+  --color-invoice:  #c0392b;
+
+  /* 中性色（兼容旧变量） */
+  --color-bg:       oklch(0.965 0 0);
+  --color-surface:  #ffffff;
+  --color-text:     oklch(0.145 0 0);
+  --color-text-sub: oklch(0.556 0 0);
+  --color-text-tip: oklch(0.708 0 0);
+
+  /* shadcn/ui 风格圆角 */
   --radius-sm:  6px;
-  --radius-md:  10px;
-  --radius-lg:  14px;
-  --radius-xl:  20px;
+  --radius-md:  8px;
+  --radius-lg:  12px;
+  --radius-xl:  16px;
 
   /* 阴影 */
-  --shadow-sm:  0 1px 4px rgba(10,43,94,0.08);
-  --shadow-md:  0 4px 16px rgba(10,43,94,0.10);
-  --shadow-lg:  0 8px 32px rgba(10,43,94,0.13);
+  --shadow-sm:  0 1px 3px oklch(0 0 0 / 0.08), 0 1px 2px oklch(0 0 0 / 0.04);
+  --shadow-md:  0 4px 12px oklch(0 0 0 / 0.08);
+  --shadow-lg:  0 8px 28px oklch(0 0 0 / 0.10);
+  --shadow-xl:  0 16px 48px oklch(0 0 0 / 0.15);
 
   /* 语义色：检验结果 */
   --color-result-high:       #dc2626;
@@ -49,8 +70,29 @@
 
   /* 卡片悬停动效参数 */
   --card-hover-lift:    translateY(-5px);
-  --card-hover-shadow:  0 12px 36px rgba(10,43,94,0.18);
+  --card-hover-shadow:  0 12px 36px oklch(0 0 0 / 0.12);
   --transition-card:    transform 0.22s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.22s ease, border-color 0.18s ease;
+
+  /* ===== Phase 1 个性化新增 ===== */
+  /* 玻璃质感 */
+  --glass-bg:       rgba(255, 255, 255, 0.75);
+  --glass-border:   rgba(255, 255, 255, 0.2);
+  --glass-shadow:   0 8px 32px oklch(0 0 0 / 0.06);
+  --glass-blur:     blur(20px);
+
+  /* 渐变边框 */
+  --border-gradient: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-mid) 100%);
+
+  /* 自定义滚动条 */
+  --scrollbar-w:      6px;
+  --scrollbar-bg:     transparent;
+  --scrollbar-thumb:  var(--color-primary-light);
+  --scrollbar-hover:  var(--color-primary);
+
+  /* 选中色 */
+  --selection-bg:    rgba(18, 81, 163, 0.18);
+  --selection-text:  inherit;
+
 }
 
 /* ===== NProgress 顶部进度条样式覆盖 ===== */
@@ -69,7 +111,7 @@ html {
   text-size-adjust: 100% !important;
 }
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
+  font-family: 'Noto Sans SC', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   background: var(--color-bg);
   color: var(--color-text);
   min-height: 100vh;
@@ -79,9 +121,36 @@ body {
   padding-bottom: constant(safe-area-inset-bottom);
 }
 
-/* 隐藏滚动条 */
-body::-webkit-scrollbar { display: none; }
-* { scrollbar-width: none; -ms-overflow-style: none; }
+/* ===== 自定义滚动条 ===== */
+::-webkit-scrollbar { width: var(--scrollbar-w); height: var(--scrollbar-w); }
+::-webkit-scrollbar-track { background: var(--scrollbar-bg); }
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: calc(var(--scrollbar-w) / 2);
+  transition: background 0.2s;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-hover); }
+* { scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-bg); }
+
+/* ===== 自定义选中色 ===== */
+::selection { background: var(--selection-bg); color: var(--selection-text); }
+::-moz-selection { background: var(--selection-bg); color: var(--selection-text); }
+
+/* ===== 背景噪点纹理（纸张质感） ===== */
+body::after {
+  content: '';
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: -1;
+  opacity: 0.4;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.5'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 200px 200px;
+}
+
+
 
 /* ===== 登录页（样式已移至 LoginView.vue scoped）===== */
 /* 以下为全局共用的表单和按钮样式，供登录页scoped样式继承 */
@@ -132,50 +201,7 @@ body::-webkit-scrollbar { display: none; }
 /* ===== Dashboard / 主体 ===== */
 .dashboard { padding: 2rem; background: var(--color-bg); min-height: calc(100vh - 60px); }
 
-/* ===== 导航栏（主样式移到 NavBar.vue scoped，这里保留兼容） ===== */
-.nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0; flex-wrap: wrap; gap: 1rem; }
-.nav-left { display: flex; gap: 0.6rem; flex-wrap: wrap; }
-.nav-right { display: flex; gap: 0.6rem; }
-.nav-btn {
-  padding: 0.45rem 1rem;
-  color: white;
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-weight: 500;
-  font-size: 0.88rem;
-  letter-spacing: 0.02em;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-}
-.nav-patients.nav-btn   { background: var(--color-patients) !important; }
-.nav-patients.nav-btn:hover { filter: brightness(1.12); }
-.nav-records.nav-btn    { background: var(--color-records) !important; }
-.nav-records.nav-btn:hover { filter: brightness(1.12); }
-.nav-lab.nav-btn        { background: var(--color-lab) !important; }
-.nav-lab.nav-btn:hover  { filter: brightness(1.12); }
-.nav-imaging.nav-btn    { background: var(--color-imaging) !important; }
-.nav-imaging.nav-btn:hover { filter: brightness(1.12); }
-.nav-invoice.nav-btn    { background: var(--color-invoice) !important; }
-.nav-invoice.nav-btn:hover { filter: brightness(1.12); }
-.change-pwd-btn {
-  background: rgba(255,255,255,0.18) !important;
-  border: 1px solid rgba(255,255,255,0.35) !important;
-  color: white;
-  padding: 0.4rem 0.9rem;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: 0.85rem;
-  transition: all 0.2s ease;
-  backdrop-filter: blur(4px);
-}
-.change-pwd-btn:hover { background: rgba(255,255,255,0.28) !important; }
-.logout-btn {
-  background: rgba(255,255,255,0.12) !important;
-  border: 1px solid rgba(255,255,255,0.25) !important;
-  box-shadow: none !important;
-}
-.logout-btn:hover { background: rgba(220,60,60,0.55) !important; }
+/* ===== 导航栏（已迁移至 NavBar.vue 的 el-menu） ===== */
 
 /* ===== 修改密码弹窗 ===== */
 .pwd-modal-overlay {
@@ -207,20 +233,84 @@ body::-webkit-scrollbar { display: none; }
   text-align: center;
   border-top: 3px solid var(--color-primary);
   transition: transform 0.2s, box-shadow 0.2s;
+  position: relative;
+  overflow: hidden;
 }
 .stat-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
+/* 统计卡片顶部渐变装饰条 */
+.stat-card::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: var(--border-gradient);
+}
 .stat-value { font-size: 2.4rem; font-weight: 700; color: var(--color-primary); margin-bottom: 0.4rem; letter-spacing: -0.02em; }
 .stat-label { color: var(--color-text-sub); font-size: 0.88rem; font-weight: 500; }
 
-/* ===== 内容卡片 ===== */
+/* ===== 内容卡片（支持玻璃质感模式） ===== */
 .content-card {
   padding: 2rem;
   background: var(--color-surface);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
   border: 1px solid var(--color-border);
+  position: relative;
+  overflow: hidden;
 }
 .content-card h2 { color: var(--color-text); margin-bottom: 1rem; font-size: 1.15rem; font-weight: 700; }
+
+/* 玻璃质感模式：卡片半透明 + 模糊背景 */
+.content-card.glass {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+/* ===== 渐变边框装饰 ===== */
+.border-glow {
+  position: relative;
+}
+.border-glow::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--border-gradient);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* 标题左侧渐变竖条装饰 */
+.title-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 1rem;
+}
+.title-bar::before {
+  content: '';
+  width: 3px;
+  height: 1.2em;
+  background: var(--border-gradient);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.title-bar h2 { margin-bottom: 0; }
+
+/* 渐变分割线 */
+.divider-gradient {
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, var(--color-primary) 50%, transparent 100%);
+  border: none;
+  margin: 1.5rem 0;
+  opacity: 0.3;
+}
 
 /* ===== 响应式 ===== */
 
@@ -272,7 +362,7 @@ body::-webkit-scrollbar { display: none; }
 
 /* 触摸设备优化 */
 @media (hover: none) and (pointer: coarse) {
-  button, .el-button, .nav-btn { min-height: 44px; }
+  button, .el-button { min-height: 44px; }
   .el-input__inner { min-height: 40px; }
 }
 

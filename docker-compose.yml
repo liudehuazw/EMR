@@ -7,10 +7,10 @@ services:
     container_name: emr-mysql
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change_this_root_password}
+      MYSQL_ROOT_PASSWORD: emr_root_2024
       MYSQL_DATABASE: electronic_medical_record
       MYSQL_USER: emr_user
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change_this_user_password}
+      MYSQL_PASSWORD: emr_password_2024
     ports:
       - "3307:3306"
     volumes:
@@ -31,9 +31,13 @@ services:
       SPRING_PROFILES_ACTIVE: docker
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/electronic_medical_record?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
       SPRING_DATASOURCE_USERNAME: emr_user
-      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-change_this_user_password}
-      JWT_SECRET: ${JWT_SECRET:-change_this_jwt_secret}
+      SPRING_DATASOURCE_PASSWORD: emr_password_2024
+      JWT_SECRET: emr-secret-key-2024
       FILE_UPLOAD_PATH: /app/uploads
+      ZHIPU_AI_TIMEOUT: 300000
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
     ports:
       - "8080:8080"
     volumes:

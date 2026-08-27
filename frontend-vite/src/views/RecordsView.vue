@@ -137,12 +137,16 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { usePatientsStore } from '@/stores/usePatients';
 import { useRecordsStore } from '@/stores/useRecords';
 import { formatDate } from '@/utils/index';
-import { uploadFileToCloud, apiRequest } from '@/api/index';
+import { usePatientScope } from '@/stores/usePatientScope';
+import { uploadFileToCloud } from '@/api/files';
+import { processOcrFile } from '@/api/ocr';
+import { deleteMedicalRecord } from '@/api/medical-records';
 
 const route = useRoute();
 const router = useRouter();
 const patientsStore = usePatientsStore();
 const recordsStore = useRecordsStore();
+const patientScope = usePatientScope();
 
 // ===== 患者切换 =====
 const activePatientId = ref(null);
@@ -151,6 +155,7 @@ const activeRecords = computed(() => recordsStore.getPatientRecords(activePatien
 
 const switchPatient = (patientId) => {
   activePatientId.value = patientId;
+  patientScope.setCurrentPatient(patientId);
   selectedRecordId.value = null;
   currentFileIdx.value = 0;
 };
@@ -246,7 +251,7 @@ const confirmDeleteRecord = async () => {
     await ElMessageBox.confirm('确认删除该病历记录？此操作不可恢复。', '删除确认', { type: 'warning' });
     const record = selectedRecord.value;
     if (record.backendId) {
-      try { await apiRequest(`/medical-records/${record.backendId}`, { method: 'DELETE' }); } catch (_) {}
+      try { await deleteMedicalRecord(record.backendId); } catch (_) {}
     }
     const idx = recordsStore.medicalRecords.findIndex(r => r.id === record.id);
     if (idx !== -1) { recordsStore.medicalRecords.splice(idx, 1); recordsStore.save(); }
@@ -286,21 +291,6 @@ const extractVisitDateFromOcr = (ocrText) => {
   return null;
 };
 
-const performOCR = async (file) => {
-  const formData = new FormData();
-  formData.append('file', file);
-  const token = localStorage.getItem('emr_token');
-  const response = await fetch('/api/ocr/process', {
-    method: 'POST',
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    body: formData
-  });
-  if (!response.ok) throw new Error(`OCR HTTP ${response.status}`);
-  const data = await response.json();
-  if (!data.success) throw new Error(data.error || 'OCR失败');
-  return data.data;
-};
-
 const handleFileChange = async (e) => {
   const files = Array.from(e.target.files || []);
   if (!files.length) return;
@@ -318,7 +308,7 @@ const handleFileChange = async (e) => {
         uploadedFiles.push({ name: file.name, type: file.type, url, size: file.size });
         if (!detectedDate) {
           try {
-            const ocrResult = await performOCR(file);
+            const ocrResult = await processOcrFile(file);
             detectedDate = extractVisitDateFromOcr(ocrResult.text || '');
             if (detectedDate) console.log('[Records] OCR识别就诊日期:', detectedDate);
           } catch (ocrErr) { console.warn('[Records] OCR失败:', ocrErr); }
@@ -403,12 +393,20 @@ const exportAllRecordsZip = async () => {
 
 // ===== 初始化：自动选中第一个患者 =====
 onMounted(() => {
+  // 新页面挂载：先清空共享选中，避免上一页残留
+  patientScope.setCurrentPatient(null);
   if (patientsStore.patients.length > 0) activePatientId.value = patientsStore.patients[0].id;
   // 支持从其他页面跳转传入 patientId
   const { patientId } = route.query;
   if (patientId) { activePatientId.value = Number(patientId) || patientId; router.replace({ path: '/records', query: {} }); }
+  patientScope.setCurrentPatient(activePatientId.value);
 });
-watch(() => patientsStore.patients, (list) => { if (list.length > 0 && !activePatientId.value) activePatientId.value = list[0].id; }, { immediate: true });
+watch(() => patientsStore.patients, (list) => {
+  if (list.length > 0 && !activePatientId.value) {
+    activePatientId.value = list[0].id;
+    patientScope.setCurrentPatient(list[0].id);
+  }
+}, { immediate: true });
 </script>
 
 <style scoped>

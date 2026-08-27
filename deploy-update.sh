@@ -1,7 +1,6 @@
 #!/bin/bash
 # ================================================
 #   电子病历系统 - 服务器更新部署脚本
-#   服务器: YOUR_SERVER_IP
 #   执行方式: chmod +x deploy-update.sh && ./deploy-update.sh
 # ================================================
 
@@ -15,13 +14,27 @@ echo ""
 
 # ---- 配置变量 ----
 PROJECT_DIR="/opt/Electronic-medical-record"
-FRONTEND_HTML="/var/www/html/index.html"
 BACKEND_SERVICE="emr-backend"
 NGINX_CONF="/www/server/panel/vhost/nginx/emr-8088.conf"
 BACKEND_PORT=8080
 DB_NAME="emr_db"
-DB_USER="root"
-DB_PASS="${DB_PASS:-your_db_password_here}"
+ENV_FILE="/opt/emr.env"
+
+# ================================================
+# 加载环境变量（所有凭据统一来自 /opt/emr.env）
+# ================================================
+if [ -f "${ENV_FILE}" ]; then
+    set -a
+    source "${ENV_FILE}"
+    set +a
+    echo "✅ 已加载环境变量文件 ${ENV_FILE}"
+else
+    echo "❌ 未找到环境变量文件 ${ENV_FILE}，请先在服务器创建！"
+    exit 1
+fi
+
+DB_USER="${SPRING_DATASOURCE_USERNAME:-root}"
+DB_PASS="${SPRING_DATASOURCE_PASSWORD:-}"
 
 # ================================================
 # 步骤1: 停止后端服务
@@ -87,13 +100,11 @@ fi
 echo ""
 
 # ================================================
-# 步骤5: 更新前端文件
+# 步骤5: 前端文件
+# 注意：前端由 frontend-vite/deploy-local.ps1（或 deploy.ps1）单独构建上传，
+#      这里不再覆盖 /var/www/html，避免把 Vue 构建产物换成旧版单文件 HTML。
 # ================================================
-echo "【步骤5/7】更新前端文件..."
-sudo cp ${PROJECT_DIR}/frontend/index.html ${FRONTEND_HTML}
-sudo chown www:www ${FRONTEND_HTML}
-sudo chmod 644 ${FRONTEND_HTML}
-echo "✅ 前端文件已更新到 ${FRONTEND_HTML}"
+echo "【步骤5/7】前端文件：跳过（由 frontend-vite/deploy.ps1 单独部署）"
 echo ""
 
 # ================================================
@@ -130,6 +141,10 @@ server
             proxy_connect_timeout 60s;
             proxy_send_timeout 720s;
             proxy_read_timeout 720s;
+
+            # SSE 流式输出：必须关闭缓冲，否则 AI 助手逐字输出会被积压
+            proxy_buffering off;
+            proxy_cache off;
 
             # 文件上传大小限制
             client_max_body_size 100m;
@@ -224,16 +239,8 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=emr-backend
 
-Environment=SPRING_PROFILES_ACTIVE=prod
-Environment=SPRING_DATASOURCE_URL=jdbc:mysql://localhost:3306/emr_db?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
-Environment=SPRING_DATASOURCE_USERNAME=root
-Environment=SPRING_DATASOURCE_PASSWORD=your_db_password_here
-Environment=JWT_SECRET=your_jwt_secret_here
-Environment=FILE_UPLOAD_PATH=/opt/Electronic-medical-record/uploads
-Environment=ALIYUN_OSS_ENDPOINT=oss-cn-hangzhou.aliyuncs.com
-Environment=ALIYUN_OSS_ACCESS_KEY_ID=your_access_key_id_here
-Environment=ALIYUN_OSS_ACCESS_KEY_SECRET=your_access_key_secret_here
-Environment=ALIYUN_OSS_BUCKET_NAME=your_bucket_name_here
+# 所有环境变量（数据库/OSS/AI/Redis/JWT/路径）统一从 /opt/emr.env 读取
+EnvironmentFile=/opt/emr.env
 
 [Install]
 WantedBy=multi-user.target
@@ -285,7 +292,7 @@ echo "========================================"
 echo "  ✅ 部署完成！"
 echo "========================================"
 echo ""
-echo "访问地址: http://YOUR_SERVER_IP:8088"
+echo "访问地址: https://your-domain.com"
 echo ""
 echo "如果后端还没响应，请等待30秒后再访问"
 echo "查看后端日志: sudo journalctl -u ${BACKEND_SERVICE} -f"

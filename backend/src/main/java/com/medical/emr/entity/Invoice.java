@@ -43,6 +43,14 @@ public class Invoice {
     @TableField("insurance_amount")
     private BigDecimal insuranceAmount;
 
+    /** Whether reimbursed by commercial insurance (0/1) */
+    @TableField("commercial_reimbursed")
+    private Integer commercialReimbursed;
+
+    /** Commercial insurance reimbursement amount */
+    @TableField("commercial_amount")
+    private BigDecimal commercialAmount;
+
     @TableField("file_url")
     private String fileUrl;
 

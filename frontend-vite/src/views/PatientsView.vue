@@ -127,7 +127,7 @@
 import { ref, reactive } from 'vue';
 import { useRouter } from 'vue-router';
 import { usePatientsStore } from '@/stores/usePatients';
-import { uploadFileToCloud } from '@/api/index';
+import { uploadFileToCloud } from '@/api/files';
 import AppIcon from '@/components/AppIcon.vue';
 import { useLabStore } from '@/stores/useLab';
 import { useImagingStore } from '@/stores/useImaging';
@@ -440,7 +440,6 @@ const confirmDelete = (patient) => {
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
   border: 1px solid var(--color-border);
-  border-left: 4px solid var(--color-primary);
 }
 .patient-grid {
   display: grid;
@@ -469,21 +468,10 @@ const confirmDelete = (patient) => {
     transform: translateY(0);
   }
 }
-.patient-card::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, var(--color-primary) 0%, var(--color-primary-mid) 100%);
-  transition: height 0.22s ease;
-}
 .patient-card:hover {
   transform: var(--card-hover-lift);
   box-shadow: var(--card-hover-shadow);
   border-color: rgba(18,81,163,0.25);
-}
-.patient-card:hover::before {
-  height: 4px;
 }
 /* 卡片名称和元信息 */
 .patient-name {

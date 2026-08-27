@@ -26,7 +26,7 @@ public class AiService {
 
     private static final Logger log = LoggerFactory.getLogger(AiService.class);
 
-    @Value("${zhipu.ai.api-key}")
+    @Value("${DEEPSEEK_API_KEY}")
     private String apiKey;
 
     @Value("${zhipu.ai.api-url}")

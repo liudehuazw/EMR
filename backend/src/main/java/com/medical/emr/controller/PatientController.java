@@ -139,11 +139,10 @@ public class PatientController {
     public ResponseEntity<ApiResponse<String>> deletePatient(@PathVariable Long id) {
         try {
             Long currentUserId = getCurrentUserId();
-            Patient patient = patientService.getPatientById(id, currentUserId);
-            if (patient == null) {
+            boolean deleted = patientService.deletePatient(id, currentUserId);
+            if (!deleted) {
                 return ResponseEntity.ok(ApiResponse.error(404, "Patient not found"));
             }
-            patientService.removeById(id);
             return ResponseEntity.ok(ApiResponse.success("Patient deleted successfully"));
         } catch (Exception e) {
             return ResponseEntity.internalServerError()

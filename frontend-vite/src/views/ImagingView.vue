@@ -67,7 +67,7 @@
           <!-- 操作栏 -->
           <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; align-items:center;">
             <el-button size="small" type="warning" @click="viewOcrText">📝 OCR原文</el-button>
-            <el-button size="small" style="background:#6366f1; color:white; border:none;" @click="triggerAiAnalysis" :loading="aiLoading"><img src="/pic/AIGLM.png" style="height:14px; vertical-align:middle; margin-right:5px; filter:brightness(0) invert(1);" /> AI智能分析</el-button>
+            <el-button size="small" style="background:#6366f1; color:white; border:none;" @click="triggerAiAnalysis" :loading="aiLoading"><img src="/pic/DeepSeek.png" style="height:14px; vertical-align:middle; margin-right:5px; filter:brightness(0) invert(1);" /> AI智能分析</el-button>
             <el-button size="small" type="warning" @click="renameReport">✏️ 修改名称</el-button>
             <el-button size="small" type="danger" @click="deleteReport">🗑️ 删除报告</el-button>
             <div style="margin-left:auto; display:flex; gap:12px; font-size:12px; color:#888; flex-wrap:wrap;">
@@ -102,7 +102,7 @@
 
             <!-- 右：AI 分析 -->
             <div style="flex:1; background:#fafaff; border:1px solid #e0e0ff; border-radius:8px; overflow:hidden; display:flex; flex-direction:column;">
-              <div style="padding:8px 12px; background:#e8e8ff; font-size:13px; font-weight:600; color:#555; border-bottom:1px solid #d0d0ff; display:flex; align-items:center; gap:6px;"><img src="/pic/AIGLM.png" style="height:16px; opacity:0.7;" /> AI智能分析</div>
+              <div style="padding:8px 12px; background:#e8e8ff; font-size:13px; font-weight:600; color:#555; border-bottom:1px solid #d0d0ff; display:flex; align-items:center; gap:6px;"><img src="/pic/DeepSeek.png" style="height:16px; opacity:0.7;" /> AI智能分析</div>
               <div style="flex:1; padding:16px; overflow-y:auto;">
                 <div v-if="aiLoading" style="display:flex; align-items:center; justify-content:center; height:100%;">
                   <div style="text-align:center;"><div style="font-size:2.5rem; margin-bottom:16px;">🔬</div><div style="font-size:15px; color:#555;">AI正在分析中...</div></div>
@@ -117,7 +117,7 @@
                 </div>
                 <div v-else style="display:flex; align-items:center; justify-content:center; height:100%;">
                   <div style="text-align:center; color:#aaa;">
-                    <div style="margin-bottom:14px;"><img src="/pic/AIGLM.png" style="height:36px; opacity:0.35;" /></div>
+                    <div style="margin-bottom:14px;"><img src="/pic/DeepSeek.png" style="height:36px; opacity:0.35;" /></div>
                     <div style="font-size:14px;">点击上方「AI智能分析」按钮</div>
                     <div style="font-size:12px; margin-top:4px;">基于OCR文本进行AI智能解读</div>
                   </div>
@@ -175,21 +175,28 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { usePatientsStore } from '@/stores/usePatients';
 import JSZip from 'jszip';
 import { useImagingStore } from '@/stores/useImaging';
-import { apiRequest, uploadFileToCloud } from '@/api/index';
+import { usePatientScope } from '@/stores/usePatientScope';
+import { uploadFileToCloud } from '@/api/files';
+import { processOcrFile } from '@/api/ocr';
+import { analyzeWithAi } from '@/api/ai';
+import { createImagingReport, deleteImagingReport } from '@/api/imaging-reports';
 import { formatDate } from '@/utils/index';
 
 const route = useRoute();
 const patientsStore = usePatientsStore();
 const imagingStore = useImagingStore();
+const patientScope = usePatientScope();
 
 const activePatientId = ref(null);
 
 onMounted(() => {
+  patientScope.setCurrentPatient(null);
   const pid = route.query.patientId;
   if (pid) {
     const id = Number(pid);
     if (patientsStore.patients.some(p => p.id === id)) {
       activePatientId.value = id;
+      patientScope.setCurrentPatient(id);
     }
   }
 });
@@ -242,7 +249,7 @@ const reportBtnStyle = (id) => ({
   border: selectedReportId.value === id ? '2px solid #1b5e20' : '1px solid #ddd'
 });
 
-const switchPatient = (id) => { activePatientId.value = id; selectedReportId.value = null; aiResult.value = ''; aiError.value = ''; };
+const switchPatient = (id) => { activePatientId.value = id; patientScope.setCurrentPatient(id); selectedReportId.value = null; aiResult.value = ''; aiError.value = ''; };
 const selectReport = (id) => { selectedReportId.value = id; aiResult.value = ''; aiError.value = ''; aiLoading.value = false; };
 const setDateRange = (m) => {
   dateRangeMonths.value = m;
@@ -282,7 +289,7 @@ const triggerUpload = () => {
       try {
         ElMessage.info(`正在上传 ${file.name}...`);
         const fileUrl = await uploadFileToCloud(file, 'imaging-reports');
-        const ocrResult = await performOCR(file);
+        const ocrResult = await processOcrFile(file, { maxRetries: 2 });
         console.log(`影像报告OCR [${i + 1}/${totalFiles}]:`, ocrResult.text?.substring(0, 80));
         let reportDate = extractDateFromOcr(ocrResult.text || '') || extractDateFromFilename(file.name);
         if (!reportDate) {
@@ -306,7 +313,7 @@ const triggerUpload = () => {
         };
         let backendId = null;
         try {
-          const res = await apiRequest('/imaging-reports', { method: 'POST', body: JSON.stringify(payload) });
+          const res = await createImagingReport(payload);
           if (res.code === 200 && res.data?.id) backendId = res.data.id;
         } catch (e) { console.warn('[Imaging] Sync to backend failed:', e); }
         const newReport = {
@@ -330,28 +337,6 @@ const triggerUpload = () => {
     if (successCount > 0) ElMessage.success(`成功上传 ${successCount}/${validFiles.length} 个影像报告`);
   };
   input.click();
-};
-
-const performOCR = async (file, maxRetries = 2) => {
-  const formData = new FormData();
-  formData.append('file', file);
-  const token = localStorage.getItem('emr_token');
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      const response = await fetch('/api/ocr/process', {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: formData
-      });
-      if (!response.ok) throw new Error(`OCR HTTP ${response.status}`);
-      const data = await response.json();
-      if (!data.success) throw new Error(data.error || 'OCR失败');
-      return data.data;
-    } catch (err) {
-      if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 2000 * (attempt + 1))); continue; }
-      throw err;
-    }
-  }
 };
 
 const extractDateFromOcr = (text) => {
@@ -449,7 +434,7 @@ const deleteReport = async () => {
     await ElMessageBox.confirm(`确定删除影像报告 "${selectedReport.value.title}"？此操作不可恢复！`, '确认删除', { type: 'warning' });
     const bid = selectedReport.value.backendId || selectedReport.value.id;
     if (bid) {
-      try { await apiRequest(`/imaging-reports/${bid}`, { method: 'DELETE' }); } catch (e) { console.warn('[Imaging] Delete from backend failed:', e); }
+      try { await deleteImagingReport(bid); } catch (e) { console.warn('[Imaging] Delete from backend failed:', e); }
     }
     imagingStore.deleteReport(selectedReportId.value);
     selectedReportId.value = null;
@@ -531,9 +516,11 @@ const triggerAiAnalysis = async () => {
   try {
     const patient = patientsStore.getPatientById(selectedReport.value.patientId);
     const dataText = selectedReport.value.ocrRawText?.replace(/\n{3,}/g, '\n\n').trim() || '（无OCR文本）';
-    const res = await apiRequest('/ai/analyze', {
-      method: 'POST',
-      body: JSON.stringify({ type: 'imaging', data: dataText, title: selectedReport.value.title || '', patientName: patient?.name || '未知' })
+    const res = await analyzeWithAi({
+      type: 'imaging',
+      data: dataText,
+      title: selectedReport.value.title || '',
+      patientName: patient?.name || '未知'
     });
     if (res.code === 200 && res.data) { aiResult.value = res.data; }
     else throw new Error(res.message || 'AI分析失败');

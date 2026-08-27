@@ -96,6 +96,8 @@ CREATE TABLE IF NOT EXISTS emr_invoice (
     total_amount DECIMAL(12,2) COMMENT '总金额',
     self_pay_amount DECIMAL(12,2) COMMENT '自费金额',
     insurance_amount DECIMAL(12,2) COMMENT '医保金额',
+    commercial_reimbursed TINYINT DEFAULT 0 COMMENT '是否已由商保报销(0否1是)',
+    commercial_amount DECIMAL(12,2) DEFAULT NULL COMMENT '商保报销金额',
     file_url VARCHAR(1024) COMMENT '文件OSS URL',
     file_name VARCHAR(255) COMMENT '原始文件名',
     file_type VARCHAR(100) COMMENT '文件类型',

@@ -1,4 +1,27 @@
 /**
+ * shadcn/ui 风格的 cn() 工具函数 — 轻量实现
+ * 合并 class 名称，支持条件 class、数组等
+ * @param  {...any} inputs - class 名称或条件对象
+ * @returns {string}
+ */
+export const cn = (...inputs) => {
+  const classes = [];
+  inputs.forEach(input => {
+    if (!input) return;
+    if (typeof input === 'string') {
+      classes.push(input);
+    } else if (Array.isArray(input)) {
+      classes.push(cn(...input));
+    } else if (typeof input === 'object') {
+      Object.entries(input).forEach(([key, val]) => {
+        if (val) classes.push(key);
+      });
+    }
+  });
+  return classes.join(' ');
+};
+
+/**
  * Format date string to YYYY-MM-DD
  * @param {string|Array} dateVal - 日期字符串或 Jackson 序列化的 LocalDate 数组 [year, month, day]
  * @returns {string}

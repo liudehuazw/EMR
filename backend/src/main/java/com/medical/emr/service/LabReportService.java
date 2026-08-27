@@ -17,15 +17,39 @@ import java.util.List;
 @Service
 public class LabReportService extends ServiceImpl<LabReportMapper, LabReport> {
 
+    private static final String CACHE_PREFIX = "labReports";
+
+    @Autowired(required = false)
+    private CacheService cacheService;
+
     @Autowired
     private LabReportItemMapper labReportItemMapper;
 
     public List<LabReport> getReportsByPatientId(Long patientId) {
-        return baseMapper.selectByPatientId(patientId);
+        String cacheKey = CACHE_PREFIX + ":" + patientId;
+        if (cacheService != null) {
+            @SuppressWarnings("unchecked")
+            List<LabReport> cached = (List<LabReport>) cacheService.get(cacheKey);
+            if (cached != null) return cached;
+        }
+        List<LabReport> reports = baseMapper.selectByPatientId(patientId);
+        if (cacheService != null) {
+            cacheService.set(cacheKey, reports, 300L);
+        }
+        return reports;
     }
 
     public Long countByPatientId(Long patientId) {
-        return baseMapper.countByPatientId(patientId);
+        String cacheKey = CACHE_PREFIX + ":count:" + patientId;
+        if (cacheService != null) {
+            Long cached = cacheService.get(cacheKey);
+            if (cached != null) return cached;
+        }
+        Long count = baseMapper.countByPatientId(patientId);
+        if (cacheService != null) {
+            cacheService.set(cacheKey, count, 300L);
+        }
+        return count;
     }
 
     @Transactional
@@ -39,6 +63,10 @@ public class LabReportService extends ServiceImpl<LabReportMapper, LabReport> {
                 item.setReportId(report.getId());
                 labReportItemMapper.insert(item);
             }
+        }
+        // 清除缓存
+        if (cacheService != null) {
+            cacheService.deleteByPattern(CACHE_PREFIX + ":*");
         }
     }
 
@@ -60,5 +88,9 @@ public class LabReportService extends ServiceImpl<LabReportMapper, LabReport> {
         labReportItemMapper.deleteByReportId(reportId);
         // Delete report
         removeById(reportId);
+        // 清除缓存
+        if (cacheService != null) {
+            cacheService.deleteByPattern(CACHE_PREFIX + ":*");
+        }
     }
 }

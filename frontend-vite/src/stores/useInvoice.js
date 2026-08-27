@@ -1,6 +1,11 @@
 import { defineStore } from 'pinia';
 import { reactive, ref } from 'vue';
-import { apiRequest } from '@/api/index';
+import {
+  fetchInvoicesByPatient,
+  createInvoice,
+  updateInvoice as updateInvoiceApi,
+  deleteInvoice as deleteInvoiceApi
+} from '@/api/invoices';
 import { useAuthStore } from './useAuth';
 
 export const useInvoiceStore = defineStore('invoice', () => {
@@ -45,16 +50,20 @@ export const useInvoiceStore = defineStore('invoice', () => {
         totalAmount: invoice.totalAmount || 0,
         selfPayAmount: invoice.selfPayAmount || '',
         insuranceAmount: invoice.insuranceAmount || '',
+        commercialReimbursed: invoice.commercialReimbursed ? 1 : 0,
+        commercialAmount: invoice.commercialReimbursed
+          ? (invoice.commercialAmount || 0)
+          : 0,
         items: JSON.stringify(Array.isArray(invoice.items) ? invoice.items : []),
         ocrRawText: invoice.ocrRawText || ''
       };
       if (invoice.backendId) {
         // 已有后端记录 → PUT 更新
-        await apiRequest(`/invoices/${invoice.backendId}`, { method: 'PUT', body: JSON.stringify(payload) });
+        await updateInvoiceApi(invoice.backendId, payload);
         console.log('[Invoice] Synced to backend (PUT):', invoice.backendId);
       } else {
         // 无后端记录 → POST 注册，并回写 backendId
-        const res = await apiRequest('/invoices', { method: 'POST', body: JSON.stringify(payload) });
+        const res = await createInvoice(payload);
         if (res.code === 200 && res.data?.id) {
           const idx = invoices.findIndex(i => i.id === invoice.id);
           if (idx !== -1) invoices[idx].backendId = res.data.id;
@@ -69,7 +78,7 @@ export const useInvoiceStore = defineStore('invoice', () => {
     const all = [];
     for (const p of patients) {
       try {
-        const res = await apiRequest(`/invoices/patient/${p.id}`);
+        const res = await fetchInvoicesByPatient(p.id);
         if (res.code === 200 && res.data) {
           // 【修复】解析可能为JSON字符串的items字段，并映射日期和文件URL字段
           all.push(...res.data.map(r => ({
@@ -78,6 +87,8 @@ export const useInvoiceStore = defineStore('invoice', () => {
             date: r.invoiceDate || r.date,
             fileUrl: r.fileUrl || r.file_url,
             ocrRawText: r.ocrRawText || r.ocr_raw_text || '',
+            commercialReimbursed: !!(r.commercialReimbursed === 1 || r.commercialReimbursed === true),
+            commercialAmount: r.commercialAmount != null ? String(r.commercialAmount) : '',
             items: r.items ? (typeof r.items === 'string' ? JSON.parse(r.items) : r.items) : []
           })));
         }
@@ -114,7 +125,7 @@ export const useInvoiceStore = defineStore('invoice', () => {
     if (idx !== -1) {
       const bid = invoices[idx].backendId;
       if (bid) {
-        try { await apiRequest(`/invoices/${bid}`, { method: 'DELETE' }); } catch (e) { console.warn('[Invoice] Delete from backend failed:', e); }
+        try { await deleteInvoiceApi(bid); } catch (e) { console.warn('[Invoice] Delete from backend failed:', e); }
       }
       invoices.splice(idx, 1);
       save();
