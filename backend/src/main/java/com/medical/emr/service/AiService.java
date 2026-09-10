@@ -26,7 +26,7 @@ public class AiService {
 
     private static final Logger log = LoggerFactory.getLogger(AiService.class);
 
-    @Value("${DEEPSEEK_API_KEY}")
+    @Value("${DEEPSEEK_API_KEY:}")
     private String apiKey;
 
     @Value("${zhipu.ai.api-url}")
@@ -105,6 +105,10 @@ public class AiService {
 
             String jsonBody = objectMapper.writeValueAsString(requestBody);
             log.info("[AI] Calling Zhipu API, model={}, prompt length={}", model, userPrompt.length());
+
+            if (apiKey == null || apiKey.isBlank()) {
+                throw new IllegalStateException("未配置 DEEPSEEK_API_KEY，AI 分析功能不可用");
+            }
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(apiUrl))
@@ -242,6 +246,10 @@ public class AiService {
             String jsonBody = objectMapper.writeValueAsString(requestBody);
             log.info("[AI] Calling Zhipu Vision API, model={}, image size={} bytes base64",
                     model, base64Image.length());
+
+            if (apiKey == null || apiKey.isBlank()) {
+                throw new IllegalStateException("未配置 DEEPSEEK_API_KEY，AI 视觉分析功能不可用");
+            }
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(apiUrl))

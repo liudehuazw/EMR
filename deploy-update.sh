@@ -37,9 +37,25 @@ DB_USER="${SPRING_DATASOURCE_USERNAME:-root}"
 DB_PASS="${SPRING_DATASOURCE_PASSWORD:-}"
 
 # ================================================
+# 自动探测 Java 可执行文件（不再写死 JDK 安装路径）
+# ================================================
+JAVA_BIN=""
+if [ -n "${JAVA_HOME}" ] && [ -x "${JAVA_HOME}/bin/java" ]; then
+    JAVA_BIN="${JAVA_HOME}/bin/java"
+else
+    JAVA_BIN="$(readlink -f "$(command -v java)" 2>/dev/null || true)"
+fi
+if [ -z "${JAVA_BIN}" ] || [ ! -x "${JAVA_BIN}" ]; then
+    echo "❌ 未找到 java（需要 JDK 17+）。请安装 JDK 或在 /opt/emr.env 中设置 JAVA_HOME"
+    exit 1
+fi
+echo "✅ 使用 Java: ${JAVA_BIN}"
+echo ""
+
+# ================================================
 # 步骤1: 停止后端服务
 # ================================================
-echo "【步骤1/7】停止后端服务..."
+echo "【步骤1/8】停止后端服务..."
 sudo systemctl stop ${BACKEND_SERVICE} || echo "警告: 服务停止失败，可能未运行"
 echo "✅ 后端服务已停止"
 echo ""
@@ -47,7 +63,7 @@ echo ""
 # ================================================
 # 步骤2: 备份当前项目
 # ================================================
-echo "【步骤2/7】备份当前项目..."
+echo "【步骤2/8】备份当前项目..."
 BACKUP_DIR="/opt/emr-backup-$(date +%Y%m%d%H%M%S)"
 if [ -d "${PROJECT_DIR}" ]; then
     sudo cp -r "${PROJECT_DIR}" "${BACKUP_DIR}"
@@ -60,32 +76,35 @@ echo ""
 # ================================================
 # 步骤3: 数据库初始化 / 迁移
 # ================================================
-echo "【步骤3/8】数据库初始化..."
+echo "【步骤3/8】数据库初始化 / 迁移..."
 
 # 检查数据库是否存在表
-TABLE_COUNT=$(mysql -u${DB_USER} -p"${DB_PASS}" ${DB_NAME} -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${DB_NAME}';" 2>/dev/null)
+TABLE_COUNT=$(mysql -u"${DB_USER}" -p"${DB_PASS}" -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${DB_NAME}';" 2>/dev/null)
 
 if [ "${TABLE_COUNT}" = "0" ] || [ -z "${TABLE_COUNT}" ]; then
-    echo "  数据库为空，执行完整初始化..."
-    mysql -u${DB_USER} -p"${DB_PASS}" ${DB_NAME} < ${PROJECT_DIR}/database/init.sql
-    if [ $? -eq 0 ]; then
-        echo "✅ 数据库表创建成功"
+    echo "  数据库为空，执行完整初始化（init.sql 已自包含全部表与字段）..."
+    # 注意：init.sql 内部自行 CREATE DATABASE / USE，因此**不能**指定库名
+    if mysql -u"${DB_USER}" -p"${DB_PASS}" < "${PROJECT_DIR}/database/init.sql"; then
+        echo "✅ 数据库初始化完成"
     else
-        echo "❌ 数据库初始化失败！请检查 init.sql"
+        echo "❌ 数据库初始化失败！请检查 database/init.sql"
         exit 1
     fi
 else
-    echo "  数据库已有 ${TABLE_COUNT} 个表，执行增量迁移..."
-    mysql -u${DB_USER} -p"${DB_PASS}" ${DB_NAME} -e "
-        ALTER TABLE patient ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(500) COMMENT '头像OSS URL';
-    " 2>/dev/null && echo "✅ avatar_url 字段已添加" || echo "⚠️ 字段可能已存在，跳过"
+    echo "  数据库已有 ${TABLE_COUNT} 个表，执行增量迁移（幂等，可重复执行）..."
+    if mysql -u"${DB_USER}" -p"${DB_PASS}" "${DB_NAME}" < "${PROJECT_DIR}/database/V5__fix_missing_columns.sql"; then
+        echo "✅ V5 迁移完成（补齐 user_id / table_data / title 等字段）"
+    else
+        echo "❌ 数据库迁移失败！请检查 database/V5__fix_missing_columns.sql"
+        exit 1
+    fi
 fi
 echo ""
 
 # ================================================
 # 步骤4: 构建后端 JAR
 # ================================================
-echo "【步骤4/7】构建后端 JAR（这一步需要几分钟，请耐心等待）..."
+echo "【步骤4/8】构建后端 JAR（这一步需要几分钟，请耐心等待）..."
 cd ${PROJECT_DIR}/backend
 
 # 构建 JAR（跳过测试，使用系统 Maven）
@@ -104,13 +123,13 @@ echo ""
 # 注意：前端由 frontend-vite/deploy-local.ps1（或 deploy.ps1）单独构建上传，
 #      这里不再覆盖 /var/www/html，避免把 Vue 构建产物换成旧版单文件 HTML。
 # ================================================
-echo "【步骤5/7】前端文件：跳过（由 frontend-vite/deploy.ps1 单独部署）"
+echo "【步骤5/8】前端文件：跳过（由 frontend-vite/deploy.ps1 单独部署）"
 echo ""
 
 # ================================================
 # 步骤6: 更新 Nginx 配置（修复 API 代理端口）
 # ================================================
-echo "【步骤6/7】更新 Nginx 配置..."
+echo "【步骤6/8】更新 Nginx 配置..."
 
 sudo tee ${NGINX_CONF} > /dev/null << 'NGINX_EOF'
 server
@@ -221,13 +240,13 @@ StartLimitBurst=3
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/opt/Electronic-medical-record/backend
+WorkingDirectory=__PROJECT_DIR__/backend
 
-ExecStart=/usr/lib/jvm/jdk-21.0.3+9/bin/java \
+ExecStart=__JAVA_BIN__ \
     -Xms128m -Xmx256m \
     -Dspring.profiles.active=prod \
     -Dserver.port=8080 \
-    -jar /opt/Electronic-medical-record/backend/target/electronic-medical-record-0.0.1-SNAPSHOT.jar
+    -jar __PROJECT_DIR__/backend/target/electronic-medical-record-0.0.1-SNAPSHOT.jar
 
 ExecStop=/bin/kill -TERM $MAINPID
 TimeoutStopSec=10
@@ -245,6 +264,9 @@ EnvironmentFile=/opt/emr.env
 [Install]
 WantedBy=multi-user.target
 SERVICE_EOF
+
+# 将占位符替换为实际路径（Java 由脚本自动探测，项目目录取自 PROJECT_DIR）
+sudo sed -i "s|__JAVA_BIN__|${JAVA_BIN}|g; s|__PROJECT_DIR__|${PROJECT_DIR}|g" /etc/systemd/system/emr-backend.service
 
 sudo systemctl daemon-reload
 echo "✅ systemctl 服务配置已更新"

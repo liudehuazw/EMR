@@ -60,7 +60,8 @@ mybatis-plus:
 
 # JWT config
 jwt:
-  secret: emr-secret-key-2024
+  # HS256 要求密钥 >= 32 字节；默认值与 application.yml 保持一致，可用 JWT_SECRET 覆盖
+  secret: ${JWT_SECRET:emr-dev-secret-do-not-use-in-prod}
   expiration: 86400000
 
 # File upload config

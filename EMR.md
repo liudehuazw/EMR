@@ -295,13 +295,13 @@ sys_user（用户表）
 patient（患者表）
     │
     │ patient_id（外键关联）
-    ├──→ medical_record（病历表）
+    ├──→ emr_medical_record（病历记录表）
     ├──→ emr_lab_report（检验报告表）
     │         │
     │         │ report_id
     │         └──→ emr_lab_report_item（检验项目明细表）
-    ├──→ imaging_report（影像报告表）
-    └──→ invoice（发票表）
+    ├──→ emr_imaging_report（影像报告表）
+    └──→ emr_invoice（发票表）
 ```
 
 ### 各表字段说明
@@ -331,6 +331,7 @@ patient（患者表）
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | id | BIGINT | 主键，自增 |
+| user_id | BIGINT | 所属用户ID |
 | patient_id | BIGINT | 关联的患者ID |
 | report_date | DATE | 报告日期 |
 | test_name | VARCHAR | 检验名称，如"血常规"、"尿常规" |
@@ -348,7 +349,7 @@ patient（患者表）
 | result_value | VARCHAR | 检验结果，如"5.6" |
 | result_flag | VARCHAR | 异常标志：↑高、↓低 |
 | unit | VARCHAR | 单位，如"×10⁹/L" |
-| ref_range | VARCHAR | 参考范围，如"3.5~9.5" |
+| reference_range | VARCHAR | 参考范围，如"3.5~9.5" |
 
 ---
 

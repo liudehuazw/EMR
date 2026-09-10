@@ -1,13 +1,27 @@
--- 创建数据库
-CREATE DATABASE IF NOT EXISTS emr_db DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+-- ============================================================
+--  电子病历系统 - 数据库初始化脚本（全新部署用）
+-- ============================================================
+--  适用场景：数据库为空，第一次部署。
+--  用法：mysql -u root -p < database/init.sql
+--
+--  ⚠️ 本脚本已包含全部表与字段，全新部署执行本脚本即可，
+--     无需再执行 V2 / V3 / V4 / V5 / migrate*.sql
+--     （那些是给"已有旧库升级"用的增量脚本）。
+--
+--  若数据库已存在并执行过旧版 init.sql，
+--  请改用 database/V5__fix_missing_columns.sql 升级。
+-- ============================================================
 
+CREATE DATABASE IF NOT EXISTS emr_db DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE emr_db;
 
--- 用户表
+-- ------------------------------------------------------------
+-- 系统用户表
+-- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS sys_user (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '用户ID',
     username VARCHAR(50) NOT NULL UNIQUE COMMENT '用户名',
-    password VARCHAR(100) NOT NULL COMMENT '密码',
+    password VARCHAR(100) NOT NULL COMMENT '密码（BCrypt）',
     real_name VARCHAR(50) COMMENT '真实姓名',
     phone VARCHAR(20) COMMENT '手机号',
     email VARCHAR(100) COMMENT '邮箱',
@@ -17,13 +31,18 @@ CREATE TABLE IF NOT EXISTS sys_user (
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统用户表';
 
--- 插入默认管理员账户 admin/admin
-INSERT INTO sys_user (username, password, real_name, status) 
-VALUES ('admin', '$2a$10$7JB720yubVSOfvVWbfXCOOxjTOQcQjmrJF1ZM4nAVccp/.rkMlDWy', '系统管理员', 1);
+-- 默认管理员账户 admin / admin
+-- 如需更换密码：见 DEPLOYMENT_GUIDE.md「默认账户」章节
+INSERT INTO sys_user (username, password, real_name, status)
+SELECT 'admin', '$2a$10$qc0XWDusfUWHehalERruPusWQ19UbahC5G0qKsbjSSdFfhpV507T2', '系统管理员', 1
+WHERE NOT EXISTS (SELECT 1 FROM sys_user WHERE username = 'admin');
 
+-- ------------------------------------------------------------
 -- 患者表
+-- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS patient (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '患者ID',
+    user_id BIGINT COMMENT '所属用户ID（数据隔离关键字段）',
     patient_no VARCHAR(50) NOT NULL UNIQUE COMMENT '患者编号',
     name VARCHAR(50) NOT NULL COMMENT '姓名',
     gender TINYINT COMMENT '性别：1-男，2-女',
@@ -38,95 +57,145 @@ CREATE TABLE IF NOT EXISTS patient (
     avatar_url VARCHAR(500) COMMENT '头像OSS URL',
     deleted TINYINT DEFAULT 0 COMMENT '是否删除：0-未删除，1-已删除',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX idx_patient_user_id (user_id),
+    INDEX idx_patient_name (name),
+    INDEX idx_patient_phone (phone)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='患者信息表';
 
--- 病历表
-CREATE TABLE IF NOT EXISTS medical_record (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '病历ID',
+-- ------------------------------------------------------------
+-- 病历记录表
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS emr_medical_record (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '病历ID',
     patient_id BIGINT NOT NULL COMMENT '患者ID',
-    record_date DATE NOT NULL COMMENT '病历日期',
-    department VARCHAR(50) COMMENT '科室',
-    doctor VARCHAR(50) COMMENT '医生',
-    diagnosis TEXT COMMENT '诊断',
-    symptoms TEXT COMMENT '症状',
+    visit_date DATE NOT NULL COMMENT '就诊日期',
+    hospital VARCHAR(255) COMMENT '医院名称',
+    department VARCHAR(100) COMMENT '科室',
+    doctor VARCHAR(100) COMMENT '医生姓名',
+    diagnosis TEXT COMMENT '诊断结果',
+    symptoms TEXT COMMENT '症状描述',
     treatment TEXT COMMENT '治疗方案',
-    prescription TEXT COMMENT '处方',
     notes TEXT COMMENT '备注',
-    deleted TINYINT DEFAULT 0 COMMENT '是否删除：0-未删除，1-已删除',
+    files JSON COMMENT '附件列表 [{name, url, type}]',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    FOREIGN KEY (patient_id) REFERENCES patient(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='病历表';
+    deleted TINYINT DEFAULT 0 COMMENT '逻辑删除标志 0-未删除 1-已删除',
+    INDEX idx_mr_patient_id (patient_id),
+    INDEX idx_mr_visit_date (visit_date),
+    FOREIGN KEY (patient_id) REFERENCES patient(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='病历记录表';
 
+-- ------------------------------------------------------------
 -- 检验报告表
-CREATE TABLE IF NOT EXISTS lab_report (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '检验报告ID',
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS emr_lab_report (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '报告ID',
+    user_id BIGINT COMMENT '所属用户ID',
     patient_id BIGINT NOT NULL COMMENT '患者ID',
     report_date DATE NOT NULL COMMENT '报告日期',
-    hospital VARCHAR(100) COMMENT '医院',
-    department VARCHAR(50) COMMENT '科室',
-    report_type VARCHAR(50) COMMENT '检验类型',
-    file_name VARCHAR(255) COMMENT '文件名',
-    file_path VARCHAR(500) COMMENT '文件路径',
-    file_size BIGINT COMMENT '文件大小',
-    extracted_data TEXT COMMENT '提取的数据(JSON格式)',
-    normal_ranges TEXT COMMENT '正常范围(JSON格式)',
-    notes TEXT COMMENT '备注',
-    deleted TINYINT DEFAULT 0 COMMENT '是否删除：0-未删除，1-已删除',
+    test_name VARCHAR(255) COMMENT '检验项目名称',
+    hospital VARCHAR(255) COMMENT '医院名称',
+    file_url VARCHAR(1024) COMMENT '文件OSS URL',
+    file_name VARCHAR(255) COMMENT '原始文件名',
+    file_type VARCHAR(100) COMMENT '文件类型',
+    ocr_raw_text LONGTEXT COMMENT 'OCR原始文本',
+    table_data LONGTEXT COMMENT '解析后的结构化数据(JSON)',
+    ocr_confidence INT COMMENT 'OCR置信度 0-100',
+    ai_analysis TEXT COMMENT 'AI分析结果',
+    upload_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '上传时间',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    FOREIGN KEY (patient_id) REFERENCES patient(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='检验报告表';
+    deleted TINYINT DEFAULT 0 COMMENT '逻辑删除标志',
+    INDEX idx_lr_patient_id (patient_id),
+    INDEX idx_lr_report_date (report_date),
+    FOREIGN KEY (patient_id) REFERENCES patient(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='检验报告表';
 
+-- ------------------------------------------------------------
+-- 检验报告项目明细表
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS emr_lab_report_item (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '项目ID',
+    report_id BIGINT NOT NULL COMMENT '所属报告ID',
+    item_code VARCHAR(100) COMMENT '项目代码',
+    item_name VARCHAR(255) NOT NULL COMMENT '项目名称',
+    item_name_original VARCHAR(255) COMMENT '原始项目名称（OCR识别）',
+    result_value VARCHAR(100) COMMENT '检测结果值',
+    result_flag VARCHAR(20) COMMENT '结果标志 ↑↓正常异常等',
+    reference_range VARCHAR(255) COMMENT '参考范围',
+    unit VARCHAR(100) COMMENT '单位',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    deleted TINYINT DEFAULT 0 COMMENT '逻辑删除标志',
+    INDEX idx_lri_report_id (report_id),
+    FOREIGN KEY (report_id) REFERENCES emr_lab_report(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='检验报告项目明细表';
+
+-- ------------------------------------------------------------
 -- 影像报告表
-CREATE TABLE IF NOT EXISTS imaging_report (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '影像报告ID',
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS emr_imaging_report (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '报告ID',
     patient_id BIGINT NOT NULL COMMENT '患者ID',
     report_date DATE NOT NULL COMMENT '报告日期',
-    hospital VARCHAR(100) COMMENT '医院',
-    department VARCHAR(50) COMMENT '科室',
-    imaging_type VARCHAR(50) COMMENT '影像类型(X光/CT/MRI等)',
-    file_name VARCHAR(255) COMMENT '文件名',
-    file_path VARCHAR(500) COMMENT '文件路径',
-    file_size BIGINT COMMENT '文件大小',
-    findings TEXT COMMENT '影像所见',
-    impression TEXT COMMENT '影像诊断',
-    notes TEXT COMMENT '备注',
-    deleted TINYINT DEFAULT 0 COMMENT '是否删除：0-未删除，1-已删除',
+    title VARCHAR(255) COMMENT '报告标题',
+    hospital VARCHAR(255) COMMENT '医院名称',
+    imaging_type VARCHAR(100) COMMENT '影像类型 CT/MRI/X光/B超等',
+    file_url VARCHAR(1024) COMMENT '文件OSS URL',
+    file_name VARCHAR(255) COMMENT '原始文件名',
+    file_type VARCHAR(100) COMMENT '文件类型',
+    ocr_raw_text LONGTEXT COMMENT 'OCR原始文本',
+    ocr_confidence INT COMMENT 'OCR置信度 0-100',
+    ai_analysis TEXT COMMENT 'AI分析结果',
+    upload_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '上传时间',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    FOREIGN KEY (patient_id) REFERENCES patient(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='影像报告表';
+    deleted TINYINT DEFAULT 0 COMMENT '逻辑删除标志',
+    INDEX idx_ir_patient_id (patient_id),
+    INDEX idx_ir_report_date (report_date),
+    FOREIGN KEY (patient_id) REFERENCES patient(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='影像报告表';
 
+-- ------------------------------------------------------------
 -- 发票表
-CREATE TABLE IF NOT EXISTS invoice (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '发票ID',
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS emr_invoice (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '发票ID',
     patient_id BIGINT NOT NULL COMMENT '患者ID',
     invoice_date DATE NOT NULL COMMENT '发票日期',
+    title VARCHAR(255) COMMENT '发票标题',
+    hospital VARCHAR(255) COMMENT '医院名称',
     invoice_no VARCHAR(100) COMMENT '发票号码',
-    hospital VARCHAR(100) COMMENT '医院',
-    department VARCHAR(50) COMMENT '科室',
-    total_amount DECIMAL(10,2) COMMENT '总金额',
-    file_name VARCHAR(255) COMMENT '文件名',
-    file_path VARCHAR(500) COMMENT '文件路径',
-    file_size BIGINT COMMENT '文件大小',
-    items TEXT COMMENT '费用明细(JSON格式)',
-    notes TEXT COMMENT '备注',
-    deleted TINYINT DEFAULT 0 COMMENT '是否删除：0-未删除，1-已删除',
+    total_amount DECIMAL(12,2) COMMENT '总金额',
+    self_pay_amount DECIMAL(12,2) COMMENT '自费金额',
+    insurance_amount DECIMAL(12,2) COMMENT '医保金额',
+    commercial_reimbursed TINYINT DEFAULT 0 COMMENT '是否已由商保报销(0否1是)',
+    commercial_amount DECIMAL(12,2) DEFAULT NULL COMMENT '商保报销金额',
+    file_url VARCHAR(1024) COMMENT '文件OSS URL',
+    file_name VARCHAR(255) COMMENT '原始文件名',
+    file_type VARCHAR(100) COMMENT '文件类型',
+    ocr_raw_text LONGTEXT COMMENT 'OCR原始文本',
+    items JSON COMMENT '发票明细 [{name, amount, category}]',
+    upload_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '上传时间',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    FOREIGN KEY (patient_id) REFERENCES patient(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='发票表';
+    deleted TINYINT DEFAULT 0 COMMENT '逻辑删除标志',
+    INDEX idx_inv_patient_id (patient_id),
+    INDEX idx_inv_invoice_date (invoice_date),
+    FOREIGN KEY (patient_id) REFERENCES patient(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='发票表';
 
--- 创建索引
-CREATE INDEX idx_patient_name ON patient(name);
-CREATE INDEX idx_patient_phone ON patient(phone);
-CREATE INDEX idx_medical_record_date ON medical_record(record_date);
-CREATE INDEX idx_medical_record_patient ON medical_record(patient_id);
-CREATE INDEX idx_lab_report_date ON lab_report(report_date);
-CREATE INDEX idx_lab_report_patient ON lab_report(patient_id);
-CREATE INDEX idx_imaging_report_date ON imaging_report(report_date);
-CREATE INDEX idx_imaging_report_patient ON imaging_report(patient_id);
-CREATE INDEX idx_invoice_date ON invoice(invoice_date);
-CREATE INDEX idx_invoice_patient ON invoice(patient_id);
+-- ------------------------------------------------------------
+-- 检验项目用户映射表（用户自定义项目名称映射）
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS emr_lab_item_mapping (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '映射ID',
+    user_id BIGINT NOT NULL COMMENT '用户ID（0表示系统默认）',
+    original_name VARCHAR(255) NOT NULL COMMENT '原始名称',
+    standard_name VARCHAR(255) NOT NULL COMMENT '标准名称',
+    item_code VARCHAR(100) COMMENT '项目代码',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_user_original (user_id, original_name),
+    INDEX idx_mapping_user_id (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='检验项目用户映射表';

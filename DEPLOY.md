@@ -1,265 +1,172 @@
-# Docker 部署指南
+# 电子病历系统 — 容器化部署文档（Docker Compose）
 
-## 🐳 快速部署
+> 适用：想用 Docker 一键跑起来试用的情况（开发机 / 测试服务器）。
+> 生产服务器上的宝塔 + systemd 部署方式见 `DEPLOYMENT_GUIDE.md`。
 
-### 前置要求
-- Docker 20.0+
-- Docker Compose 2.0+
-- 服务器内存至少 2GB
-- 可用磁盘空间至少 10GB
+---
 
-### 一键部署
+## 一、前置条件
 
-```bash
-# 克隆项目（如果还没有）
-git clone <your-repo-url>
-cd Electronic-medical-record
+| 软件 | 版本要求 | 说明 |
+|------|---------|------|
+| Docker | 20.10+ | 建议开启 BuildKit（Docker Desktop 默认开启） |
+| Docker Compose | v2（`docker compose`） | 旧版 `docker-compose` 也可用 |
+| 内存 | ≥ 4GB 建议 | 不启用 OCR 时 2GB 亦可；OCR 容器建议预留 ≥ 2GB |
+| 磁盘 | ≥ 10GB | OCR 镜像较大（PaddleOCR） |
 
-# 给部署脚本执行权限
-chmod +x deploy.sh
+宿主机**不需要**安装 Node.js / Maven / JDK / MySQL / Redis，全部在容器内完成。
 
-# 执行部署
-./deploy.sh
-```
+---
 
-### 手动部署
+## 二、快速开始
 
 ```bash
-# 1. 构建并启动所有服务
-docker-compose up -d --build
+# 1.（可选）配置 OSS / AI Key 等敏感项
+cp .env.example .env
+# 编辑 .env，填入 DEEPSEEK_API_KEY、ALIYUN_OSS_* 等
+# 不填也能启动，只是「文件上传」与「AI 分析/助手」不可用
 
-# 2. 查看服务状态
-docker-compose ps
+# 2. 启动 MySQL + Redis + 后端 + 前端
+docker compose up -d
 
-# 3. 查看日志
-docker-compose logs -f
+# 3. 需要 OCR（图片/PDF 文字识别）时追加启动
+docker compose --profile ocr up -d
 ```
 
-## 📋 服务说明
+首次启动会构建镜像（后端约 3~5 分钟，前端约 2 分钟；OCR 镜像约 10~20 分钟），
+构建完成后访问：
 
-| 服务 | 端口 | 描述 | 数据持久化 |
-|------|------|------|------------|
-| frontend | 80 | Vue3前端应用 | 无 |
-| backend | 8080 | Spring Boot后端 | uploads/ |
-| mysql | 3306 | MySQL 8.0数据库 | mysql_data/ |
-| redis | 6379 | Redis缓存 | redis_data/ |
-
-## 🔧 配置说明
-
-### 环境变量
-
-在 `docker-compose.yml` 中可以修改以下配置：
-
-```yaml
-environment:
-  # 数据库配置
-  MYSQL_ROOT_PASSWORD: emr_root_2024
-  MYSQL_DATABASE: electronic_medical_record
-  MYSQL_USER: emr_user
-  MYSQL_PASSWORD: emr_password_2024
-  
-  # JWT密钥（建议修改）
-  JWT_SECRET: emr-secret-key-2024
-  
-  # 文件上传路径
-  FILE_UPLOAD_PATH: /app/uploads
+```
+http://localhost:8088
 ```
 
-### 端口修改
+默认账号：`admin` / `admin`（演示账号 `user` / `user`，数据不落库）
 
-如果需要修改端口，在 `docker-compose.yml` 中调整：
+> ⚠️ 首次启动时 `database/init.sql` 会自动建库建表。
+> **只有 mysql 数据卷为空时才会执行**，之后修改 init.sql 不会自动生效。
 
-```yaml
-ports:
-  - "8081:8080"  # 后端端口改为8081
-  - "81:80"      # 前端端口改为81
-  - "3307:3306"  # MySQL端口改为3307
-```
+---
 
-## 📁 数据持久化
+## 三、服务与端口
 
-所有重要数据都通过 Docker volumes 持久化：
+| 服务 | 容器名 | 宿主端口 | 容器端口 | 说明 |
+|------|--------|---------|---------|------|
+| frontend | emr-frontend | 8088 | 80 | Nginx 托管前端 + 反代 `/api` 到后端 |
+| backend | emr-backend | 8081 | 8080 | Spring Boot（context-path `/api`） |
+| mysql | emr-mysql | 3307 | 3306 | MySQL 8.0 |
+| redis | emr-redis | 6379 | 6379 | 缓存（连不上会自动降级，不影响功能） |
+| ocr | emr-ocr | 8000 | 8000 | 文字识别（需 `--profile ocr`） |
 
-- `mysql_data` - MySQL数据
-- `uploads_data` - 上传的文件
-- `redis_data` - Redis数据
+后端容器内通过服务名互访：`mysql:3306`、`redis:6379`、`ocr:8000`。
 
-### 备份数据
+端口被占用时，修改 `docker-compose.yml` 中对应服务的 `ports` 左侧端口即可
+（前端反代用的是容器网络，不受宿主端口影响）。
+
+---
+
+## 四、环境变量
+
+`.env`（复制自 `.env.example`，已被 gitignore）中的变量会被 compose 自动读取：
+
+| 变量 | 必填 | 说明 |
+|------|------|------|
+| `MYSQL_ROOT_PASSWORD` | 否 | MySQL root 密码，默认 `emr_root_2024` |
+| `MYSQL_USER` / `MYSQL_PASSWORD` | 否 | 应用使用的数据库账号，默认 `emr` / `emr_password_2024` |
+| `REDIS_PASSWORD` | 否 | 默认 `emr_redis_2024` |
+| `JWT_SECRET` | 建议改 | HS256 要求 ≥ 32 字节 |
+| `DEEPSEEK_API_KEY` | 否 | 不填则 AI 报告分析与 AI 就诊助手不可用 |
+| `ALIYUN_OSS_ENDPOINT` / `_ACCESS_KEY_ID` / `_ACCESS_KEY_SECRET` / `_BUCKET_NAME` | 否 | 不填则头像/报告/发票文件无法上传 |
+
+> 生产环境请务必先改掉 `MYSQL_*`、`REDIS_PASSWORD`、`JWT_SECRET` 的默认值。
+
+---
+
+## 五、常用运维命令
 
 ```bash
-# 备份MySQL数据
-docker exec emr-mysql mysqldump -u root -p electronic_medical_record > backup.sql
+# 查看状态 / 日志
+docker compose ps
+docker compose logs -f backend
+docker compose logs -f frontend
 
-# 备份上传文件
-docker cp emr-backend:/app/uploads ./uploads_backup
+# 重启 / 停止 / 删除
+docker compose restart backend
+docker compose down            # 停止并删除容器（保留数据卷）
+docker compose down -v         # ⚠️ 连同数据卷一起删除（数据全丢）
+
+# 进入容器
+docker compose exec backend sh
+docker compose exec mysql mysql -uroot -p emr_db
+
+# 重新构建（改了源码 / Dockerfile / pom / package.json 之后）
+docker compose build --no-cache backend
+docker compose up -d backend
 ```
 
-### 恢复数据
+### 数据库备份与恢复
 
 ```bash
-# 恢复MySQL数据
-docker exec -i emr-mysql mysql -u root -p electronic_medical_record < backup.sql
+# 备份
+docker compose exec -T mysql mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" emr_db > backup.sql
 
-# 恢复上传文件
-docker cp ./uploads_backup emr-backend:/app/uploads
+# 恢复
+docker compose exec -T mysql mysql -uroot -p"$MYSQL_ROOT_PASSWORD" emr_db < backup.sql
 ```
 
-## 🔄 更新部署
-
-### 更新代码
+### 数据库结构升级（已有数据）
 
 ```bash
-# 拉取最新代码
-git pull
-
-# 重新构建并部署
-./deploy.sh --clean
+docker compose exec -T mysql mysql -uroot -p"$MYSQL_ROOT_PASSWORD" emr_db \
+  < database/V5__fix_missing_columns.sql
 ```
 
-### 仅重启服务
+### 修改 admin 密码
 
 ```bash
-# 重启所有服务
-docker-compose restart
-
-# 重启特定服务
-docker-compose restart backend
+docker compose exec mysql mysql -uroot -p"$MYSQL_ROOT_PASSWORD" emr_db \
+  -e "UPDATE sys_user SET password='\$2a\$10\$新的BCrypt哈希' WHERE username='admin';"
 ```
 
-## 🐛 故障排除
+哈希生成方式见 `DEPLOYMENT_GUIDE.md`「默认账户」章节。
 
-### 查看日志
+---
+
+## 六、单独构建镜像（不用 compose）
 
 ```bash
-# 查看所有服务日志
-docker-compose logs
+# 后端（多阶段构建，无需本机 Maven/JDK）
+docker build -t emr-backend ./backend
 
-# 查看特定服务日志
-docker-compose logs backend
-docker-compose logs frontend
-docker-compose logs mysql
+# 前端（Node 构建 + Nginx）
+docker build -t emr-frontend ./frontend-vite
+
+# OCR（文字识别服务）
+docker build -t emr-ocr ./backend/ocr-service
 ```
 
-### 进入容器调试
+---
 
-```bash
-# 进入后端容器
-docker exec -it emr-backend bash
+## 七、常见问题
 
-# 进入MySQL容器
-docker exec -it emr-mysql mysql -u root -p
+| 现象 | 原因 / 解决 |
+|------|------------|
+| 前端能打开但接口 404 | 后端容器未就绪，`docker compose logs -f backend` 等待启动完成；或改过 `context-path` |
+| 后端启动报缺环境变量 | `.env` 未创建或为空；`docker compose up -d` 前先 `cp .env.example .env` |
+| 上传文件失败 | 未配置 `ALIYUN_OSS_*`，或 OSS Bucket 未配置跨域（CORS）规则 |
+| AI 分析返回错误 | 未配置 `DEEPSEEK_API_KEY`，或额度/限流（前端会自动退避重试） |
+| OCR 请求超时 | 未启用 OCR 容器：`docker compose --profile ocr up -d`；多页 PDF 处理较慢（最长约 10 分钟） |
+| 容器反复重启 | `docker compose logs <服务>`；OCR 常见于内存不足，需给宿主机加内存或 swap |
+| 改了 `init.sql` 但没生效 | 初始化只在 mysql 数据卷为空时执行，需 `docker compose down -v` 重建（会清空数据）或手动执行迁移脚本 |
+| 端口冲突 | 修改 `docker-compose.yml` 中 `ports` 左侧端口 |
 
-# 进入前端容器
-docker exec -it emr-frontend sh
-```
+---
 
-### 常见问题
+## 八、何时不要用 Compose
 
-#### 1. 端口被占用
-```bash
-# 查看端口占用
-lsof -i :80
-lsof -i :8080
+- 服务器内存 ≤ 2GB：OCR（PaddleOCR）容易 OOM，建议 OCR 单独部署或改用云端 OCR；
+- 需要 HTTPS / 域名：用宝塔 Nginx 反代更省事，见 `DEPLOYMENT_GUIDE.md`；
+- 需要开机自启与进程守护：systemd 比 `restart: unless-stopped` 更贴合运维习惯。
 
-# 修改docker-compose.yml中的端口映射
-```
+---
 
-#### 2. 内存不足
-```bash
-# 查看系统资源
-docker stats
-
-# 限制容器内存使用
-# 在docker-compose.yml中添加：
-services:
-  backend:
-    mem_limit: 1g
-```
-
-#### 3. 磁盘空间不足
-```bash
-# 清理Docker
-docker system prune -a
-
-# 查看磁盘使用
-df -h
-```
-
-## 🔒 安全配置
-
-### 1. 修改默认密码
-务必修改 `docker-compose.yml` 中的默认密码：
-- MySQL root密码
-- MySQL用户密码
-- JWT密钥
-
-### 2. 防火墙配置
-```bash
-# 只开放必要端口
-ufw allow 80/tcp
-ufw allow 443/tcp
-ufw enable
-```
-
-### 3. SSL证书配置
-建议使用Nginx或Traefik配置HTTPS：
-```bash
-# 使用Let's Encrypt
-certbot --nginx -d yourdomain.com
-```
-
-## 📊 监控
-
-### 基础监控
-```bash
-# 查看容器状态
-docker-compose ps
-
-# 查看资源使用
-docker stats
-```
-
-### 健康检查
-所有服务都配置了健康检查，可以通过以下命令查看：
-```bash
-docker inspect emr-backend | grep -A 10 Health
-```
-
-## 🚀 性能优化
-
-### 1. 生产环境配置
-```yaml
-# docker-compose.prod.yml
-services:
-  backend:
-    environment:
-      SPRING_PROFILES_ACTIVE: prod
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-        reservations:
-          memory: 1G
-```
-
-### 2. 数据库优化
-```sql
--- MySQL配置优化
-SET GLOBAL innodb_buffer_pool_size = 1073741824; -- 1GB
-SET GLOBAL max_connections = 200;
-```
-
-## 📞 支持
-
-如果遇到问题，请：
-1. 查看日志：`docker-compose logs`
-2. 检查配置：`docker-compose config`
-3. 重新部署：`./deploy.sh --clean`
-
-## 🔄 版本回滚
-
-```bash
-# 回滚到上一个版本
-git checkout HEAD~1
-./deploy.sh --clean
-```
+*最后更新：2026-09*

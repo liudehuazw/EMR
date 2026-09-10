@@ -142,6 +142,10 @@ public class AiAssistantService {
         String jsonBody = objectMapper.writeValueAsString(body);
         log.info("[AI] Chat round, messages={}, model={}", messages.size(), model);
 
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new IllegalStateException("未配置 DEEPSEEK_API_KEY，AI 就诊助手不可用");
+        }
+
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(apiUrl))
                 .header("Content-Type", "application/json")

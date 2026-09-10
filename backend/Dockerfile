@@ -1,32 +1,35 @@
-# 使用官方Java 21运行时作为基础镜像
-FROM openjdk:21-jdk-slim
+# ============================================================
+#  后端镜像（多阶段构建）
+#  构建：docker build -t emr-backend ./backend
+#  说明：不需要本地安装 Maven / JDK，也不需要 mvnw 包装器
+# ============================================================
 
-# 设置工作目录
+# ---------- 阶段 1：构建 ----------
+FROM maven:3.9-eclipse-temurin-21 AS build
+WORKDIR /build
+
+# 先复制 pom，利用 Docker 层缓存预下载依赖
+COPY pom.xml .
+RUN mvn -B -q -DskipTests dependency:go-offline || true
+
+# 再复制源码并打包
+COPY src ./src
+RUN mvn -B -q clean package -DskipTests
+
+# ---------- 阶段 2：运行 ----------
+FROM eclipse-temurin:21-jre
 WORKDIR /app
 
-# 复制Maven配置文件
-COPY pom.xml .
+ENV TZ=Asia/Shanghai \
+    JAVA_OPTS="-Xms128m -Xmx256m"
 
-# 复制Maven wrapper文件（如果存在）
-COPY mvnw* ./
-COPY .mvn .mvn
+# pom.xml 版本为 0.0.1-SNAPSHOT，产物名固定，用通配符避免版本号写死
+COPY --from=build /build/target/electronic-medical-record-*.jar /app/app.jar
 
-# 下载依赖（利用Docker缓存层）
-RUN chmod +x mvnw 2>/dev/null || true
-RUN ./mvnw dependency:go-offline -B || mvn dependency:go-offline -B || true
+# 本地文件上传目录（可通过 FILE_UPLOAD_PATH 覆盖）
+RUN mkdir -p /app/uploads
 
-# 复制源代码
-COPY src ./src
-
-# 构建应用
-RUN chmod +x mvnw 2>/dev/null || true
-RUN ./mvnw clean package -DskipTests || mvn clean package -DskipTests
-
-# 暴露端口
 EXPOSE 8080
 
-# 设置JVM参数
-ENV JAVA_OPTS="-Xmx512m -Xms256m"
-
-# 启动应用
-CMD ["java", "-jar", "target/electronic-medical-record-1.0.0.jar"]
+# 配置全部通过环境变量注入，见 docker-compose.yml / DEPLOYMENT_GUIDE.md
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar /app/app.jar"]

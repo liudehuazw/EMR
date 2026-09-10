@@ -134,30 +134,47 @@
 
 ### 环境要求
 
-- Java 17+
-- MySQL 8.0+
+- Java 17+（项目以 Java 21 为编译目标）
 - Maven 3.6+
-- Python 3.8+ (OCR 服务)
+- Node.js 18+
+- MySQL 8.0+ —— 仅“连数据库模式”需要；另有 H2 内存库模式可零配置启动
+- Python 3.8+ 或 Docker —— 仅 OCR 服务需要
 
-### 1. 数据库初始化
+### 最快上手：不用装 MySQL
+
+```powershell
+cd backend
+.\run-dev.ps1 -Profile dev     # H2 内存数据库，自动建表并写入演示数据
+```
+
+后端启动在 http://localhost:8080 ，默认账号 `admin` / `admin`。
+数据仅存在本次运行期间，进程退出即清空（初始数据见 `backend/src/main/resources/data-h2.sql`）。
+
+### 使用 MySQL
+
+**1）初始化数据库**
 
 ```bash
+# init.sql 已自包含全部表与字段，执行这一个脚本即可
+# 注意：init.sql 内部自行 CREATE DATABASE / USE，不要指定库名
 mysql -u root -p < database/init.sql
 ```
 
-数据库名：`emr_db`，密码通过环境变量 `SPRING_DATASOURCE_PASSWORD` 配置（详见 `DEPLOYMENT_GUIDE.md`）
+数据库名：`emr_db`，连接信息通过 `backend/local.env` 注入（复制 `local.env.example` 后填写）。
 
-### 2. 后端启动
+> 已有的旧库升级，请改用 `database/V5__fix_missing_columns.sql`（幂等，可重复执行）。
 
-```bash
+**2）启动后端**
+
+```powershell
 cd backend
-mvn clean package -DskipTests
-mvn spring-boot:run
+copy local.env.example local.env     # 填入数据库密码、OSS、AI Key 等
+.\run-dev.ps1
 ```
 
 后端服务将在 http://localhost:8080 启动
 
-### 3. 前端启动（Vue 3 + Vite）
+### 前端启动（Vue 3 + Vite）
 
 ```bash
 cd frontend-vite
@@ -176,15 +193,19 @@ copy deploy-local.ps1.example deploy-local.ps1
 .\deploy-local.ps1
 ```
 
-### 4. OCR 服务启动
+### OCR 服务启动
+
+OCR 服务代码位于 `backend/ocr-service/`（PaddleOCR，含 `main.py` / `requirements.txt` / `Dockerfile`）。
 
 ```bash
-cd deploy
-docker build -f ocr-cloud.dockerfile -t emr-ocr .
+cd backend/ocr-service
+docker build -t emr-ocr .
 docker run -p 8000:8000 emr-ocr
 ```
 
-### 5. 登录系统
+后端通过环境变量 `OCR_SERVICE_URL` 访问该服务（默认 `http://localhost:8000`）；容器化一键部署请参见 [DEPLOY.md](DEPLOY.md)。
+
+### 登录系统
 
 - 管理员账户：`admin` / `admin`（数据持久化）
 - 演示账户：`user` / `user`（数据不保存，刷新即清空）
@@ -199,7 +220,34 @@ docker run -p 8000:8000 emr-ocr
 
 ## 部署说明
 
-### 服务器部署
+### 方式一：Docker Compose 一键部署（推荐试用）
+
+宿主机只需安装 Docker / Docker Compose，无需 Node、Maven、MySQL：
+
+```bash
+# 1.（可选）配置 OSS / AI Key 等，不填也能启动，仅上传与 AI 功能不可用
+cp .env.example .env
+
+# 2. 启动 MySQL + Redis + 后端 + 前端
+docker compose up -d
+
+# 3. 如需 OCR（图片/PDF 文字识别，镜像较大，建议空闲内存 ≥ 2GB）
+docker compose --profile ocr up -d
+```
+
+启动后访问：**http://localhost:8088**（账号 `admin` / `admin`）
+
+| 服务 | 宿主端口 | 说明 |
+|------|---------|------|
+| frontend | 8088 | 前端页面（Nginx 托管 + API 反代） |
+| backend | 8081 | Spring Boot API |
+| mysql | 3307 | 数据库（首次启动自动执行 `database/init.sql`） |
+| redis | 6379 | 缓存 |
+| ocr | 8000 | 文字识别（需 `--profile ocr`） |
+
+> 详细说明与排障见 `DEPLOY.md`
+
+### 方式二：服务器手动部署（宝塔 / systemd）
 
 
 **部署脚本**：`deploy-update.sh`
@@ -239,7 +287,8 @@ Electronic-medical-record/
 │   │   ├── config/            # 配置类
 │   │   ├── utils/             # 工具类
 │   │   └── security/          # 安全相关
-│   └── src/main/resources/    # 配置文件
+│   ├── src/main/resources/    # 配置文件（application*.yml、schema-h2.sql、data-h2.sql）
+│   └── ocr-service/           # PaddleOCR Python 服务（main.py / requirements.txt / Dockerfile）
 ├── frontend-vite/             # 新版前端（Vue 3 + Vite SFC）
 │   ├── src/
 │   │   ├── views/             # 页面视图组件
@@ -254,29 +303,35 @@ Electronic-medical-record/
 │   ├── deploy-local.ps1.example
 │   └── vite.config.js         # Vite 构建配置
 ├── database/                  # 数据库脚本
-│   ├── init.sql               # 初始化脚本（库名 emr_db）
-│   ├── V2__add_avatar_url.sql
+│   ├── init.sql               # 初始化脚本（全新部署，已自包含全部表与字段）
+│   ├── V5__fix_missing_columns.sql  # 旧库升级（补齐缺失字段，幂等）
+│   ├── V2__add_avatar_url.sql       # 以下为历史增量脚本，全新部署无需执行
 │   ├── V3__add_emr_data_tables.sql
 │   └── V4__add_commercial_insurance.sql
-├── deploy/                    # OCR 服务文件
-│   ├── main.py                # OCR 服务代码
-│   ├── ocr-cloud.dockerfile   # Docker 构建文件
-│   └── cloud-requirements.txt # Python 依赖
 ├── docs/                      # 文档
 │   ├── PRD-patient-module.md
 │   ├── ocr-module-requirements.md
 │   └── commercial-insurance-requirements.md
 ├── backend/local.env.example  # 本地环境变量示例
-├── deploy-update.sh           # 自动部署脚本
+├── backend/Dockerfile         # 后端容器镜像（多阶段构建）
+├── frontend-vite/Dockerfile   # 前端容器镜像（Node 构建 + Nginx）
+├── docker-compose.yml         # 一键容器化部署编排
+├── .env.example               # compose 环境变量示例（OSS / AI Key 等）
+├── deploy-update.sh           # 服务器自动部署脚本
 ├── README.md                  # 项目说明
-└── DEPLOY.md                  # 部署文档
+└── DEPLOY.md                  # 容器化部署文档
 ```
 
 ## 数据库迁移（已有库升级）
 
 ```bash
-mysql -u root -p emr_db < database/V4__add_commercial_insurance.sql
+# V5：补齐代码引用但历史脚本遗漏的字段（user_id / table_data / title 等）
+# 幂等，可重复执行
+mysql -u root -p emr_db < database/V5__fix_missing_columns.sql
 ```
+
+> `V2 / V3 / V4` 为历史增量脚本，
+> 全新部署无需执行（`init.sql` 已包含全部表与字段）。
 
 ## API文档
 

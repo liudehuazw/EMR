@@ -1,0 +1,5 @@
+node_modules/
+dist/
+.codex-logs/
+deploy.ps1
+deploy-local.ps1
