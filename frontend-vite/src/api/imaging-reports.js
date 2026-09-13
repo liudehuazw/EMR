@@ -11,3 +11,10 @@ export function createImagingReport(payload) {
 export function deleteImagingReport(id) {
   return apiRequest(`/imaging-reports/${id}`, { method: 'DELETE' });
 }
+
+export function patchImagingOcrText(id, ocrRawText) {
+  return apiRequest(`/imaging-reports/${id}/ocr-text`, {
+    method: 'PATCH',
+    body: JSON.stringify({ ocrRawText })
+  });
+}

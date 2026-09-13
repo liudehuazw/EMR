@@ -1,5 +1,6 @@
 package com.medical.emr.controller;
 
+import com.medical.emr.dto.OcrTextUpdateRequest;
 import com.medical.emr.dto.ApiResponse;
 import com.medical.emr.entity.ImagingReport;
 import com.medical.emr.service.ImagingReportService;
@@ -61,6 +62,19 @@ public class ImagingReportController {
             return ResponseEntity.ok(ApiResponse.success("影像报告更新成功", report));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(ApiResponse.error("更新影像报告失败: " + e.getMessage()));
+        }
+    }
+
+    @PatchMapping("/{id}/ocr-text")
+    public ResponseEntity<ApiResponse<Void>> updateOcrText(@PathVariable Long id,
+                                                         @RequestBody OcrTextUpdateRequest request) {
+        try {
+            imagingReportService.updateOcrText(id, request.getOcrRawText());
+            return ResponseEntity.ok(ApiResponse.success("OCR原文已保存"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("保存OCR原文失败: " + e.getMessage()));
         }
     }
 

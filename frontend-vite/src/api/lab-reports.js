@@ -15,3 +15,10 @@ export function updateLabReport(id, payload) {
 export function deleteLabReport(id) {
   return apiRequest(`/lab-reports/${id}`, { method: 'DELETE' });
 }
+
+export function patchLabOcrText(id, ocrRawText) {
+  return apiRequest(`/lab-reports/${id}/ocr-text`, {
+    method: 'PATCH',
+    body: JSON.stringify({ ocrRawText })
+  });
+}

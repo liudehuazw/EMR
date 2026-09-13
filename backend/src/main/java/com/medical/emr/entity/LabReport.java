@@ -18,9 +18,6 @@ public class LabReport {
     @TableId(value = "id", type = IdType.AUTO)
     private Long id;
 
-    @TableField("user_id")
-    private Long userId;
-
     @TableField("patient_id")
     private Long patientId;
 

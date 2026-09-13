@@ -19,6 +19,9 @@ public class MedicalRecordService extends ServiceImpl<MedicalRecordMapper, Medic
     @Autowired(required = false)
     private CacheService cacheService;
 
+    @Autowired
+    private FileCleanupHelper fileCleanupHelper;
+
     public List<MedicalRecord> getRecordsByPatientId(Long patientId) {
         String cacheKey = CACHE_PREFIX + ":" + patientId;
         if (cacheService != null) {
@@ -46,27 +49,35 @@ public class MedicalRecordService extends ServiceImpl<MedicalRecordMapper, Medic
         return count;
     }
 
-    private void evictCache() {
-        if (cacheService != null) {
-            cacheService.deleteByPattern(CACHE_PREFIX + ":*");
+    private void evictCache(Long patientId) {
+        if (cacheService == null || patientId == null) {
+            return;
         }
+        cacheService.delete(CACHE_PREFIX + ":" + patientId);
+        cacheService.delete(CACHE_PREFIX + ":count:" + patientId);
     }
 
     public boolean save(MedicalRecord record) {
         boolean result = super.save(record);
-        evictCache();
+        evictCache(record.getPatientId());
         return result;
     }
 
     public boolean updateById(MedicalRecord record) {
         boolean result = super.updateById(record);
-        evictCache();
+        evictCache(record.getPatientId());
         return result;
     }
 
     public boolean removeById(Long id) {
+        MedicalRecord record = getById(id);
+        if (record != null) {
+            fileCleanupHelper.deleteMedicalRecordFiles(record.getFiles());
+        }
         boolean result = super.removeById(id);
-        evictCache();
+        if (record != null) {
+            evictCache(record.getPatientId());
+        }
         return result;
     }
 }

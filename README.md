@@ -6,9 +6,9 @@
 
 这是一个现代化的家庭医疗记录管理网站，支持患者档案管理、病历统计、检验报告、影像报告和发票统计等功能。系统支持多种格式的文件上传，并能自动解析提取关键数据。
 
-注：目前仅为项目原型。
+**本仓库为 GitHub 开源原型**，功能与私有生产项目对齐，不含生产部署脚本与敏感配置。
 
-*请自行部署服务器，如需更改相关业务端口，请注意相关对接参数*
+**最快试用**：`cp .env.example .env && docker compose up -d` → 打开 http://localhost:8088（`admin` / `admin`）。详见 [DEPLOY.md](DEPLOY.md)。
 
 
 ## 系统架构
@@ -115,13 +115,16 @@
 
 - 👤 **患者档案管理** - 患者信息的增删改查、头像上传裁剪
 - 📊 **病历统计** - 按日期自动分类的病历管理，智能提取就诊日期
-- 💰 **发票统计** - 医疗费用统计；支持商保报销录入与实际自付汇总
-- 🔬 **检验报告** - 支持图片/PDF上传，自动提取数值和正常范围；趋势图与 AI 分析
+- 💰 **发票统计** - 医疗费用统计；支持商保报销勾选录入，汇总显示商保报销与实际自付
+- 🔬 **检验报告** - 支持图片/PDF上传，自动提取数值和正常范围；OCR 原文可编辑保存
 - 🏥 **影像报告** - 医学影像资料的管理
-- 🤖 **AI 就诊助手** - 基于检验/病历数据的智能解读（需配置 API Key）
-- �️ **头像管理** - 支持头像上传、裁剪、缩放、拖动调整
+- 💬 **AI 智能分析** - 检验/影像报告一键解读（按用户配置的 AI 模型，非固定 DeepSeek）
+- 🤖 **AI 就诊助手** - 右下角悬浮窗，SSE 流式问答；工具查库且**按登录用户隔离**患者数据
+- ⚙️ **系统设置** - NavBar 入口：存储方式（admin 全站 OSS/本地切换）、AI 模型（每用户独立 API Key）
+- 🖼️ **头像管理** - 支持头像上传、裁剪、缩放、拖动调整
 - 👥 **演示模式** - 演示账户 user/user，数据不保存，刷新即清空
-- �📱 **响应式设计** - 兼容手机浏览器访问
+- 📱 **响应式设计** - 兼容手机浏览器访问
+- 🔒 **隐私选项** - 本地存储 + 本地 Ollama 可完全本地化处理文件与 AI（见系统设置说明）
 
 ## 文件支持
 
@@ -162,7 +165,7 @@ mysql -u root -p < database/init.sql
 
 数据库名：`emr_db`，连接信息通过 `backend/local.env` 注入（复制 `local.env.example` 后填写）。
 
-> 已有的旧库升级，请改用 `database/V5__fix_missing_columns.sql`（幂等，可重复执行）。
+> 已有的旧库升级，请依次执行 `database/V5__system_and_ai_config.sql` 与 `database/V6__fix_missing_columns.sql`（均幂等，可重复执行）。
 
 **2）启动后端**
 
@@ -210,15 +213,7 @@ docker run -p 8000:8000 emr-ocr
 - 管理员账户：`admin` / `admin`（数据持久化）
 - 演示账户：`user` / `user`（数据不保存，刷新即清空）
 
-### 以下为演示页面 ###
-
-<img width="2560" height="1239" alt="ScreenShot_2026-05-23_1411_694" src="https://github.com/user-attachments/assets/1c55e40c-49d6-4de2-9ef1-2aaef2f1e4fb" />
-<img width="2560" height="1239" alt="ScreenShot_2026-05-23_141344_472" src="https://github.com/user-attachments/assets/f44a1ece-ad32-43c8-9580-6da3fead433e" />
-<img width="2560" height="1239" alt="ScreenShot_2026-05-23_141543_786" src="https://github.com/user-attachments/assets/5002927f-c1ec-416d-9331-7c3e9804720e" />
-<img width="2560" height="1239" alt="ScreenShot_2026-05-23_141944_527" src="https://github.com/user-attachments/assets/102bbd52-4ccd-48e2-90b8-de4ddc0210fe" />
-<img width="2560" height="1239" alt="ScreenShot_2026-05-23_142035_314" src="https://github.com/user-attachments/assets/c5ac1635-e5d8-4899-aba8-bb7ce4d5e4f3" />
-
-## 部署说明
+## 部署说明 (如遇端口冲突请自行定义业务相关端口)
 
 ### 方式一：Docker Compose 一键部署（推荐试用）
 
@@ -304,8 +299,9 @@ Electronic-medical-record/
 │   └── vite.config.js         # Vite 构建配置
 ├── database/                  # 数据库脚本
 │   ├── init.sql               # 初始化脚本（全新部署，已自包含全部表与字段）
-│   ├── V5__fix_missing_columns.sql  # 旧库升级（补齐缺失字段，幂等）
-│   ├── V2__add_avatar_url.sql       # 以下为历史增量脚本，全新部署无需执行
+│   ├── V5__system_and_ai_config.sql  # 系统配置 + 用户 AI 配置表
+│   ├── V6__fix_missing_columns.sql   # 旧库升级（补齐缺失字段，幂等）
+│   ├── V2__add_avatar_url.sql        # 以下为历史增量脚本，全新部署无需执行
 │   ├── V3__add_emr_data_tables.sql
 │   └── V4__add_commercial_insurance.sql
 ├── docs/                      # 文档
@@ -319,15 +315,22 @@ Electronic-medical-record/
 ├── .env.example               # compose 环境变量示例（OSS / AI Key 等）
 ├── deploy-update.sh           # 服务器自动部署脚本
 ├── README.md                  # 项目说明
+├── CHANGELOG.md               # 版本变更记录
 └── DEPLOY.md                  # 容器化部署文档
 ```
 
 ## 数据库迁移（已有库升级）
 
+新增系统配置与用户 AI 配置表：
+
 ```bash
-# V5：补齐代码引用但历史脚本遗漏的字段（user_id / table_data / title 等）
-# 幂等，可重复执行
-mysql -u root -p emr_db < database/V5__fix_missing_columns.sql
+mysql -u root -p emr_db < database/V5__system_and_ai_config.sql
+```
+
+补齐代码引用但历史脚本遗漏的字段（`table_data`、发票 `title`、patient 字段等）：
+
+```bash
+mysql -u root -p emr_db < database/V6__fix_missing_columns.sql
 ```
 
 > `V2 / V3 / V4` 为历史增量脚本，
@@ -350,8 +353,25 @@ mysql -u root -p emr_db < database/V5__fix_missing_columns.sql
 
 ### 文件上传
 
-- POST `/api/files/upload` - 文件上传到 OSS
+- POST `/api/files/upload` - 文件上传到 OSS 或本地（由系统存储配置决定）
+- GET `/api/files/preview/{folder}/{filename}` - 文件预览（JWT 或 `?token=`）
 - GET `/api/files/{filename}` - 文件下载
+
+### 系统与用户 AI 配置
+
+- GET/PUT `/api/system/config/storage` - 存储方式（GET 登录可读；PUT 仅 admin）
+- GET/PUT `/api/user/ai-config` - 当前用户的 AI 模型配置
+- POST `/api/user/ai-config/test` - 在线验证 AI 连接
+
+### OCR 原文编辑
+
+- PATCH `/api/lab-reports/{id}/ocr-text` - 保存检验报告 OCR 原文
+- PATCH `/api/imaging-reports/{id}/ocr-text` - 保存影像报告 OCR 原文
+
+### AI 分析与会话
+
+- POST `/api/ai/analyze` - 单报告 AI 解读（检验/影像）
+- POST `/api/ai/chat` - AI 就诊助手（SSE 流式；工具查库按用户隔离）
 
 ### OCR 服务
 

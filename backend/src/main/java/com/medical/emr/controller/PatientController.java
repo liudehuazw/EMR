@@ -4,12 +4,12 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.medical.emr.dto.ApiResponse;
 import com.medical.emr.dto.PatientForm;
 import com.medical.emr.entity.Patient;
-import com.medical.emr.entity.User;
 import com.medical.emr.service.PatientService;
+import com.medical.emr.service.UserService;
+import com.medical.emr.utils.SecurityUtils;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -33,19 +33,19 @@ public class PatientController {
     @Autowired
     private PatientService patientService;
 
+    @Autowired
+    private UserService userService;
+
     /**
-     * Helper method to get current logged-in user ID from SecurityContext
+     * Resolve current logged-in user ID from JWT username.
      */
     private Long getCurrentUserId() {
-        try {
-            Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-            if (principal instanceof User) {
-                return ((User) principal).getId();
-            }
-            return null;
-        } catch (Exception e) {
+        String username = SecurityUtils.getCurrentUsername();
+        if (username == null) {
             return null;
         }
+        var user = userService.findByUsername(username);
+        return user != null ? user.getId() : null;
     }
 
     /**

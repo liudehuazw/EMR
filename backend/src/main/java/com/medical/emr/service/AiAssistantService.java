@@ -5,11 +5,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.medical.emr.dto.AiToolSource;
 import com.medical.emr.dto.ChatMessage;
 import com.medical.emr.dto.ChatRequest;
+import com.medical.emr.dto.LlmConfigDto;
 import com.medical.emr.exception.RateLimitException;
 import com.medical.emr.service.AiToolExecutor.ExecResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
@@ -42,32 +42,35 @@ public class AiAssistantService {
 
     private static final int MAX_ROUNDS = 5;
 
-    @Value("${DEEPSEEK_API_KEY:}")
-    private String apiKey;
-
-    @Value("${zhipu.ai.api-url}")
-    private String apiUrl;
-
-    @Value("${zhipu.ai.model}")
-    private String model;
-
-    @Value("${zhipu.ai.timeout:300000}")
-    private int timeout;
-
     private final AiToolExecutor toolExecutor;
+    private final UserAiConfigService userAiConfigService;
+    private final UserService userService;
+    private final LlmClient llmClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .build();
 
-    public AiAssistantService(AiToolExecutor toolExecutor) {
+    public AiAssistantService(AiToolExecutor toolExecutor, UserAiConfigService userAiConfigService,
+                              UserService userService, LlmClient llmClient) {
         this.toolExecutor = toolExecutor;
+        this.userAiConfigService = userAiConfigService;
+        this.userService = userService;
+        this.llmClient = llmClient;
     }
 
-    /**
-     * Handle one user message: tool-calling loop, then stream the final answer.
-     */
-    public void chat(ChatRequest req, ChatEventSink sink) {
+    public void chat(String username, ChatRequest req, ChatEventSink sink) {
+        if (username == null || username.isBlank()) {
+            sink.error("未登录，无法使用 AI 助手");
+            return;
+        }
+        var loginUser = userService.findByUsername(username);
+        if (loginUser == null || loginUser.getId() == null) {
+            sink.error("无法识别当前用户，拒绝查询");
+            return;
+        }
+        Long currentUserId = loginUser.getId();
+        LlmConfigDto llmConfig = userAiConfigService.getEffectiveConfig(username);
         List<Map<String, Object>> messages = new ArrayList<>();
         messages.add(systemMessage(buildSystemPrompt(req)));
         if (req.getHistory() != null) {
@@ -79,15 +82,15 @@ public class AiAssistantService {
                 messages.add(mm);
             }
         }
-        Map<String, Object> user = new LinkedHashMap<>();
-        user.put("role", "user");
-        user.put("content", req.getMessage());
-        messages.add(user);
+        Map<String, Object> userMessage = new LinkedHashMap<>();
+        userMessage.put("role", "user");
+        userMessage.put("content", req.getMessage());
+        messages.add(userMessage);
 
         List<AiToolSource> sources = new ArrayList<>();
         try {
             for (int round = 0; round < MAX_ROUNDS; round++) {
-                ChatTurn turn = callDeepSeekStream(messages, sink::delta);
+                ChatTurn turn = callDeepSeekStream(llmConfig, messages, sink::delta);
 
                 if (turn.toolCalls.isEmpty()) {
                     sink.sources(sources);
@@ -103,7 +106,7 @@ public class AiAssistantService {
                 for (ToolCall tc : turn.toolCalls) {
                     try {
                         Map<String, Object> argMap = parseArguments(tc.arguments);
-                        ExecResult res = toolExecutor.execute(tc.name, argMap, req.getContextPatientId());
+                        ExecResult res = toolExecutor.execute(tc.name, argMap, req.getContextPatientId(), currentUserId);
                         if (res.sources != null) sources.addAll(res.sources);
                         String toolContent = res.ok
                                 ? objectMapper.writeValueAsString(res.data)
@@ -129,36 +132,21 @@ public class AiAssistantService {
 
     // ==================== DeepSeek streaming call ====================
 
-    private ChatTurn callDeepSeekStream(List<Map<String, Object>> messages, java.util.function.Consumer<String> onDelta)
+    private ChatTurn callDeepSeekStream(LlmConfigDto config, List<Map<String, Object>> messages, java.util.function.Consumer<String> onDelta)
             throws Exception {
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("model", model);
         body.put("messages", messages);
-        body.put("stream", true);
         body.put("temperature", 0.2);
         body.put("max_tokens", 4096);
         body.put("tools", objectMapper.readTree(toolExecutor.toolsJson()));
 
-        String jsonBody = objectMapper.writeValueAsString(body);
-        log.info("[AI] Chat round, messages={}, model={}", messages.size(), model);
+        log.info("[AI] Chat round, messages={}, model={}", messages.size(), config.getModelId());
 
-        if (apiKey == null || apiKey.isBlank()) {
-            throw new IllegalStateException("未配置 DEEPSEEK_API_KEY，AI 就诊助手不可用");
-        }
-
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(apiUrl))
-                .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer " + apiKey)
-                .timeout(Duration.ofMillis(timeout))
-                .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
-                .build();
-
-        HttpResponse<InputStream> response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
+        HttpResponse<InputStream> response = llmClient.rawStreamRequest(config, body);
 
         if (response.statusCode() != 200) {
             String errBody = new String(response.body().readAllBytes(), StandardCharsets.UTF_8);
-            throw buildApiException(response.statusCode(), errBody);
+            throw llmClient.buildApiException(response.statusCode(), errBody);
         }
 
         StringBuilder content = new StringBuilder();
@@ -214,20 +202,6 @@ public class AiAssistantService {
         return new ChatTurn(content.toString(), List.of());
     }
 
-    private RuntimeException buildApiException(int status, String body) {
-        log.error("[AI] DeepSeek returned status {}: {}", status, body);
-        if (status == 429 || (body != null && body.contains("1302") && body.contains("速率限制"))) {
-            return new RateLimitException("AI服务请求频率过高，请稍后再试", 60);
-        }
-        // 透传 DeepSeek 原始错误信息，便于定位（个人工具，可接受）
-        String detail = body == null ? "" : body.trim();
-        if (detail.length() > 300) detail = detail.substring(0, 300);
-        return new RuntimeException("AI服务返回错误: HTTP " + status
-                + (detail.isEmpty() ? "" : " —— " + detail));
-    }
-
-    // ==================== message builders ====================
-
     private Map<String, Object> systemMessage(String content) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("role", "system");
@@ -276,16 +250,17 @@ public class AiAssistantService {
         String scope = req.getContextPatientId() != null
                 ? "当前会话已锁定一位患者（患者 id = " + req.getContextPatientId() + "）。"
                         + "所有患者相关的查询只能针对这位患者，不要搜索或返回其他患者的数据。"
-                : "当前在患者列表页，允许查询所有患者的数据。当用户用名字提到某位患者时，"
+                : "当前在患者列表页，只能查询当前登录用户自己的患者数据。当用户用名字提到某位患者时，"
                         + "先调用 search_patients 找到其 id，再用其它工具查询。";
         return "你是“电子病历数据助手”，帮助用户查询和分析其电子病历系统中的数据。"
                 + "可查询的数据：患者档案、病历/就诊记录、检验报告（含指标历史趋势、异常指标）、影像报告、发票花费。\n"
                 + "规则：\n"
                 + "1. 必须基于工具返回的真实数据作答，不得编造任何数字或信息；查询不到时明确说“未查询到相关数据”。\n"
-                + "2. 回答用中文，简洁、条理清晰；金额单位用“元”并保留两位小数；日期用 YYYY-MM-DD。\n"
-                + "3. 涉及费用时说明口径（总金额/自付/医保/商保）。\n"
-                + "4. 涉及医疗内容仅作信息整理与参考，不构成医疗诊断建议。\n"
-                + "5. 一次提问尽量用最少的工具调用完成。\n"
+                + "2. 只能访问当前登录用户自己的患者及其关联数据，不得访问其他用户的数据。\n"
+                + "3. 回答用中文，简洁、条理清晰；金额单位用“元”并保留两位小数；日期用 YYYY-MM-DD。\n"
+                + "4. 涉及费用时说明口径（总金额/自付/医保/商保）。\n"
+                + "5. 涉及医疗内容仅作信息整理与参考，不构成医疗诊断建议。\n"
+                + "6. 一次提问尽量用最少的工具调用完成。\n"
                 + scope;
     }
 

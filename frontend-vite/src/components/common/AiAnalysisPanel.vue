@@ -1,7 +1,7 @@
 <template>
   <div class="ai-panel">
     <div class="ai-panel-header">
-      <img src="/pic/DeepSeek.png" class="ai-icon" alt="" />
+      <span class="ai-icon">💬</span>
       AI智能分析
     </div>
     <div class="ai-panel-body">
@@ -16,7 +16,7 @@
         <el-button size="small" style="margin-top:12px;" @click="$emit('retry')">🔄 重试</el-button>
       </div>
       <div v-else class="ai-state">
-        <img src="/pic/DeepSeek.png" class="ai-placeholder-icon" alt="" />
+        <span class="ai-placeholder-icon">💬</span>
         <div class="ai-state-text">点击上方「AI智能分析」按钮</div>
         <div class="ai-hint">{{ emptyHint }}</div>
       </div>
@@ -56,7 +56,7 @@ defineEmits(['retry']);
   align-items: center;
   gap: 6px;
 }
-.ai-icon { height: 16px; opacity: 0.7; }
+.ai-icon { font-size: 14px; line-height: 1; opacity: 0.85; }
 .ai-panel-body { flex: 1; padding: 16px; overflow-y: auto; }
 .ai-state {
   display: flex;
@@ -69,7 +69,7 @@ defineEmits(['retry']);
   color: #aaa;
 }
 .ai-state-icon { font-size: 2.5rem; margin-bottom: 16px; }
-.ai-placeholder-icon { height: 36px; opacity: 0.35; margin-bottom: 14px; }
+.ai-placeholder-icon { font-size: 2.25rem; line-height: 1; opacity: 0.35; margin-bottom: 14px; }
 .ai-state-text { font-size: 14px; color: #555; }
 .ai-hint { font-size: 12px; margin-top: 4px; color: #aaa; }
 .ai-error .ai-state-text { color: #ef4444; }

@@ -20,6 +20,9 @@ public class InvoiceService extends ServiceImpl<InvoiceMapper, Invoice> {
     @Autowired(required = false)
     private CacheService cacheService;
 
+    @Autowired
+    private FileCleanupHelper fileCleanupHelper;
+
     public List<Invoice> getInvoicesByPatientId(Long patientId) {
         String cacheKey = CACHE_PREFIX + ":" + patientId;
         if (cacheService != null) {
@@ -79,6 +82,10 @@ public class InvoiceService extends ServiceImpl<InvoiceMapper, Invoice> {
     }
 
     public boolean removeById(Long id) {
+        Invoice invoice = getById(id);
+        if (invoice != null) {
+            fileCleanupHelper.deleteIfPresent(invoice.getFileUrl());
+        }
         boolean result = super.removeById(id);
         evictCache();
         return result;

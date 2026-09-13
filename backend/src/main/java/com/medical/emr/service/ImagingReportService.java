@@ -19,6 +19,9 @@ public class ImagingReportService extends ServiceImpl<ImagingReportMapper, Imagi
     @Autowired(required = false)
     private CacheService cacheService;
 
+    @Autowired
+    private FileCleanupHelper fileCleanupHelper;
+
     public List<ImagingReport> getReportsByPatientId(Long patientId) {
         String cacheKey = CACHE_PREFIX + ":" + patientId;
         if (cacheService != null) {
@@ -65,8 +68,21 @@ public class ImagingReportService extends ServiceImpl<ImagingReportMapper, Imagi
     }
 
     public boolean removeById(Long id) {
+        ImagingReport report = getById(id);
+        if (report != null) {
+            fileCleanupHelper.deleteIfPresent(report.getFileUrl());
+        }
         boolean result = super.removeById(id);
         evictCache();
         return result;
+    }
+
+    public void updateOcrText(Long id, String ocrRawText) {
+        ImagingReport report = getById(id);
+        if (report == null) {
+            throw new IllegalArgumentException("影像报告不存在");
+        }
+        report.setOcrRawText(ocrRawText);
+        updateById(report);
     }
 }

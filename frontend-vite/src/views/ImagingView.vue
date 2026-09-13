@@ -67,7 +67,7 @@
           <!-- 操作栏 -->
           <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; align-items:center;">
             <el-button size="small" type="warning" @click="viewOcrText">📝 OCR原文</el-button>
-            <el-button size="small" style="background:#6366f1; color:white; border:none;" @click="triggerAiAnalysis" :loading="aiLoading"><img src="/pic/DeepSeek.png" style="height:14px; vertical-align:middle; margin-right:5px; filter:brightness(0) invert(1);" /> AI智能分析</el-button>
+            <el-button size="small" style="background:#6366f1; color:white; border:none;" @click="triggerAiAnalysis" :loading="aiLoading">💬 AI智能分析</el-button>
             <el-button size="small" type="warning" @click="renameReport">✏️ 修改名称</el-button>
             <el-button size="small" type="danger" @click="deleteReport">🗑️ 删除报告</el-button>
             <div style="margin-left:auto; display:flex; gap:12px; font-size:12px; color:#888; flex-wrap:wrap;">
@@ -86,11 +86,11 @@
               <div style="flex:1; display:flex; align-items:center; justify-content:center; padding:12px; overflow:auto;">
                 <template v-if="selectedReport.fileUrl">
                   <img v-if="isImage(selectedReport)"
-                    :src="selectedReport.fileUrl"
+                    :src="reportPreviewUrl"
                     @click="openPreview"
                     style="max-width:100%; max-height:480px; object-fit:contain; cursor:pointer; border-radius:6px;" />
                   <iframe v-else-if="isPdf(selectedReport)"
-                    :src="selectedReport.fileUrl"
+                    :src="reportPreviewUrl"
                     style="width:100%; height:480px; border:none; border-radius:6px;" />
                 </template>
                 <div v-else style="text-align:center; color:#999;">
@@ -102,7 +102,7 @@
 
             <!-- 右：AI 分析 -->
             <div style="flex:1; background:#fafaff; border:1px solid #e0e0ff; border-radius:8px; overflow:hidden; display:flex; flex-direction:column;">
-              <div style="padding:8px 12px; background:#e8e8ff; font-size:13px; font-weight:600; color:#555; border-bottom:1px solid #d0d0ff; display:flex; align-items:center; gap:6px;"><img src="/pic/DeepSeek.png" style="height:16px; opacity:0.7;" /> AI智能分析</div>
+              <div style="padding:8px 12px; background:#e8e8ff; font-size:13px; font-weight:600; color:#555; border-bottom:1px solid #d0d0ff; display:flex; align-items:center; gap:6px;">💬 AI智能分析</div>
               <div style="flex:1; padding:16px; overflow-y:auto;">
                 <div v-if="aiLoading" style="display:flex; align-items:center; justify-content:center; height:100%;">
                   <div style="text-align:center;"><div style="font-size:2.5rem; margin-bottom:16px;">🔬</div><div style="font-size:15px; color:#555;">AI正在分析中...</div></div>
@@ -117,7 +117,7 @@
                 </div>
                 <div v-else style="display:flex; align-items:center; justify-content:center; height:100%;">
                   <div style="text-align:center; color:#aaa;">
-                    <div style="margin-bottom:14px;"><img src="/pic/DeepSeek.png" style="height:36px; opacity:0.35;" /></div>
+                    <div style="font-size:2.25rem; margin-bottom:14px; opacity:0.35;">💬</div>
                     <div style="font-size:14px;">点击上方「AI智能分析」按钮</div>
                     <div style="font-size:12px; margin-top:4px;">基于OCR文本进行AI智能解读</div>
                   </div>
@@ -148,16 +148,18 @@
       </div>
     </div>
 
-    <!-- OCR原文弹窗 -->
-    <el-dialog v-model="ocrDialogVisible" title="📝 OCR识别原文" width="700px">
-      <pre style="white-space:pre-wrap; font-size:13px; color:#333; max-height:60vh; overflow-y:auto; background:#f8f9fa; padding:16px; border-radius:8px; line-height:1.6;">{{ ocrText }}</pre>
-      <template #footer><el-button @click="ocrDialogVisible = false">关闭</el-button></template>
-    </el-dialog>
+    <OcrTextDialog
+      v-model:visible="ocrDialogVisible"
+      :text="ocrText"
+      :report-id="selectedReport?.backendId"
+      report-type="imaging"
+      @saved="onOcrSaved"
+    />
 
     <!-- 图片全屏预览 -->
     <el-dialog v-model="previewVisible" title="📷 报告预览" width="90vw" style="max-width:1000px;">
       <div style="text-align:center;">
-        <img :src="selectedReport?.fileUrl" style="max-width:100%; max-height:75vh; object-fit:contain; border-radius:8px;" />
+        <img :src="reportPreviewUrl" style="max-width:100%; max-height:75vh; object-fit:contain; border-radius:8px;" />
       </div>
       <template #footer>
         <el-button @click="openInNewWindow">↗ 新窗口打开</el-button>
@@ -181,6 +183,8 @@ import { processOcrFile } from '@/api/ocr';
 import { analyzeWithAi } from '@/api/ai';
 import { createImagingReport, deleteImagingReport } from '@/api/imaging-reports';
 import { formatDate } from '@/utils/index';
+import { resolvePreviewUrl } from '@/utils/filePreview';
+import OcrTextDialog from '@/components/common/OcrTextDialog.vue';
 
 const route = useRoute();
 const patientsStore = usePatientsStore();
@@ -221,6 +225,7 @@ const filteredReports = computed(() => {
   return list;
 });
 const selectedReport = computed(() => selectedReportId.value ? imagingStore.getReportById(selectedReportId.value) : null);
+const reportPreviewUrl = computed(() => resolvePreviewUrl(selectedReport.value?.fileUrl || ''));
 
 const isImage = (r) => r.fileType?.startsWith('image/');
 const isPdf = (r) => r.fileType === 'application/pdf' || r.fileName?.toLowerCase().endsWith('.pdf');
@@ -403,6 +408,14 @@ const viewOcrText = () => {
   ocrDialogVisible.value = true;
 };
 
+const onOcrSaved = (text) => {
+  ocrText.value = text;
+  if (selectedReport.value) {
+    selectedReport.value.ocrRawText = text;
+    imagingStore.updateReport(selectedReport.value);
+  }
+};
+
 const openPreview = () => { previewVisible.value = true; };
 
 const openInNewWindow = () => {
@@ -411,7 +424,7 @@ const openInNewWindow = () => {
     return;
   }
   if (typeof window !== 'undefined' && window.open) {
-    window.open(selectedReport.value.fileUrl, '_blank');
+    window.open(reportPreviewUrl.value, '_blank');
   }
 };
 

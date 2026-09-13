@@ -1,145 +1,101 @@
 package com.medical.emr.service;
 
-import com.aliyun.oss.OSS;
-import com.aliyun.oss.OSSClientBuilder;
-import com.aliyun.oss.model.ObjectMetadata;
-import com.medical.emr.config.OssConfig;
+import com.medical.emr.service.storage.FileStorageStrategy;
+import com.medical.emr.service.storage.FileStorageSupport;
+import com.medical.emr.service.storage.LocalFileStorageStrategy;
+import com.medical.emr.service.storage.OssFileStorageStrategy;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.UUID;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
 
 /**
- * 文件存储服务 - 上传到阿里云OSS
+ * 文件存储门面：按系统配置选择 OSS / 本地，删除时按 URL 自动路由
  */
 @Slf4j
 @Service
 public class FileStorageService {
 
-    @Autowired
-    private OssConfig ossConfig;
+    private final SystemConfigService systemConfigService;
+    private final OssFileStorageStrategy ossStrategy;
+    private final LocalFileStorageStrategy localStrategy;
 
-    /**
-     * 上传文件到OSS
-     * @param file 文件
-     * @param folder 文件夹路径（如 avatars, lab-reports, imaging-reports）
-     * @return 文件访问URL
-     */
+    public FileStorageService(SystemConfigService systemConfigService,
+                              OssFileStorageStrategy ossStrategy,
+                              LocalFileStorageStrategy localStrategy) {
+        this.systemConfigService = systemConfigService;
+        this.ossStrategy = ossStrategy;
+        this.localStrategy = localStrategy;
+    }
+
     public String uploadFile(MultipartFile file, String folder) {
         if (file.isEmpty()) {
             throw new IllegalArgumentException("文件不能为空");
         }
-
-        String originalFilename = file.getOriginalFilename();
-        String extension = getFileExtension(originalFilename);
-        String newFilename = generateUniqueFilename(extension);
-        String objectKey = folder + "/" + newFilename;
-
-        OSS ossClient = null;
-        try (InputStream inputStream = file.getInputStream()) {
-            ossClient = createOssClient();
-
-            ObjectMetadata metadata = new ObjectMetadata();
-            metadata.setContentType(file.getContentType());
-            metadata.setContentLength(file.getSize());
-
-            ossClient.putObject(ossConfig.getBucketName(), objectKey, inputStream, metadata);
-
-            // 生成访问URL
-            String fileUrl = generateFileUrl(objectKey);
-            log.info("文件上传成功: {} -> {}", originalFilename, fileUrl);
-            return fileUrl;
-
-        } catch (IOException e) {
-            log.error("文件上传失败: {}", originalFilename, e);
-            throw new RuntimeException("文件上传失败: " + e.getMessage(), e);
-        } finally {
-            if (ossClient != null) {
-                ossClient.shutdown();
-            }
+        if (!FileStorageSupport.isValidFolder(folder)) {
+            throw new IllegalArgumentException("无效的文件夹名称");
         }
+        return strategyForUpload().upload(file, folder);
     }
 
-    /**
-     * 删除OSS文件
-     * @param fileUrl 文件URL
-     */
     public void deleteFile(String fileUrl) {
-        if (fileUrl == null || fileUrl.isEmpty()) {
+        if (fileUrl == null || fileUrl.isBlank()) {
             return;
         }
-
-        String objectKey = extractObjectKey(fileUrl);
-        if (objectKey == null) {
-            return;
+        FileStorageStrategy strategy = strategyForUrl(fileUrl);
+        if (strategy != null) {
+            strategy.delete(fileUrl);
+        } else {
+            log.warn("未识别的文件 URL，跳过删除: {}", fileUrl);
         }
+    }
 
-        OSS ossClient = null;
-        try {
-            ossClient = createOssClient();
-            ossClient.deleteObject(ossConfig.getBucketName(), objectKey);
-            log.info("文件删除成功: {}", objectKey);
-        } catch (Exception e) {
-            log.error("文件删除失败: {}", objectKey, e);
-        } finally {
-            if (ossClient != null) {
-                ossClient.shutdown();
+    public Path resolveLocalPreviewPath(String folder, String filename) {
+        return localStrategy.resolveLocalPath(folder, filename);
+    }
+
+    public boolean localFileExists(Path path) {
+        return Files.exists(path) && Files.isRegularFile(path);
+    }
+
+    public String guessContentType(String filename) {
+        String lower = filename.toLowerCase();
+        if (lower.endsWith(".pdf")) {
+            return "application/pdf";
+        }
+        if (lower.endsWith(".png")) {
+            return "image/png";
+        }
+        if (lower.endsWith(".gif")) {
+            return "image/gif";
+        }
+        if (lower.endsWith(".webp")) {
+            return "image/webp";
+        }
+        if (lower.endsWith(".bmp")) {
+            return "image/bmp";
+        }
+        return "image/jpeg";
+    }
+
+    private FileStorageStrategy strategyForUpload() {
+        String type = systemConfigService.getStorageType();
+        if ("local".equals(type)) {
+            return localStrategy;
+        }
+        return ossStrategy;
+    }
+
+    private FileStorageStrategy strategyForUrl(String fileUrl) {
+        List<FileStorageStrategy> strategies = List.of(localStrategy, ossStrategy);
+        for (FileStorageStrategy strategy : strategies) {
+            if (strategy.supports(fileUrl)) {
+                return strategy;
             }
         }
-    }
-
-    /**
-     * 创建OSS客户端
-     */
-    private OSS createOssClient() {
-        return new OSSClientBuilder().build(
-                ossConfig.getEndpoint(),
-                ossConfig.getAccessKeyId(),
-                ossConfig.getAccessKeySecret()
-        );
-    }
-
-    /**
-     * 生成唯一文件名
-     */
-    private String generateUniqueFilename(String extension) {
-        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
-        String uuid = UUID.randomUUID().toString().substring(0, 8);
-        return timestamp + "-" + uuid + "." + extension;
-    }
-
-    /**
-     * 获取文件扩展名
-     */
-    private String getFileExtension(String filename) {
-        if (filename == null || filename.lastIndexOf(".") == -1) {
-            return "jpg";
-        }
-        return filename.substring(filename.lastIndexOf(".") + 1).toLowerCase();
-    }
-
-    /**
-     * 生成文件访问URL
-     */
-    private String generateFileUrl(String objectKey) {
-        return "https://" + ossConfig.getBucketName() + "." + ossConfig.getEndpoint() + "/" + objectKey;
-    }
-
-    /**
-     * 从URL中提取ObjectKey
-     */
-    private String extractObjectKey(String fileUrl) {
-        String prefix = ossConfig.getBucketName() + "." + ossConfig.getEndpoint() + "/";
-        int index = fileUrl.indexOf(prefix);
-        if (index == -1) {
-            return null;
-        }
-        return fileUrl.substring(index + prefix.length());
+        return null;
     }
 }

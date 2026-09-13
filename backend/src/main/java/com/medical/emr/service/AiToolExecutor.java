@@ -30,6 +30,8 @@ import java.util.Map;
  * Scope enforcement: when {@code scopedPatientId} is provided (a patient is
  * selected on the page), patient-scoped tools IGNORE the patientId the model
  * passes and always query the scoped patient.
+ * <p>
+ * All tools are further restricted to patients owned by {@code currentUserId}.
  */
 @Component
 public class AiToolExecutor {
@@ -174,27 +176,30 @@ public class AiToolExecutor {
      *
      * @return result with data (ok) or error message, plus source links
      */
-    public ExecResult execute(String name, Map<String, Object> args, Long scopedPatientId) {
+    public ExecResult execute(String name, Map<String, Object> args, Long scopedPatientId, Long currentUserId) {
+        if (currentUserId == null) {
+            return ExecResult.error("无法识别当前用户，拒绝查询", List.of());
+        }
         ToolDef def = tools.get(name);
         if (def == null) {
             return ExecResult.error("未知工具: " + name, List.of());
         }
         try {
             return switch (name) {
-                case "search_patients" -> searchPatients(args, scopedPatientId);
-                case "get_patient_spending" -> patientScoped(name, "invoice", args, scopedPatientId,
+                case "search_patients" -> searchPatients(args, scopedPatientId, currentUserId);
+                case "get_patient_spending" -> patientScoped(name, "invoice", args, scopedPatientId, currentUserId,
                         this::spending);
-                case "get_lab_trend" -> patientScoped(name, "lab", args, scopedPatientId,
+                case "get_lab_trend" -> patientScoped(name, "lab", args, scopedPatientId, currentUserId,
                         this::labTrend);
-                case "get_lab_reports" -> patientScoped(name, "lab", args, scopedPatientId,
+                case "get_lab_reports" -> patientScoped(name, "lab", args, scopedPatientId, currentUserId,
                         this::labReports);
-                case "get_abnormal_lab_items" -> patientScoped(name, "lab", args, scopedPatientId,
+                case "get_abnormal_lab_items" -> patientScoped(name, "lab", args, scopedPatientId, currentUserId,
                         this::abnormalLabItems);
-                case "get_medical_records" -> patientScoped(name, "records", args, scopedPatientId,
+                case "get_medical_records" -> patientScoped(name, "records", args, scopedPatientId, currentUserId,
                         this::medicalRecords);
-                case "get_imaging_reports" -> patientScoped(name, "imaging", args, scopedPatientId,
+                case "get_imaging_reports" -> patientScoped(name, "imaging", args, scopedPatientId, currentUserId,
                         this::imagingReports);
-                case "get_patient_overview" -> patientScoped(name, "patient", args, scopedPatientId,
+                case "get_patient_overview" -> patientScoped(name, "patient", args, scopedPatientId, currentUserId,
                         this::patientOverview);
                 default -> ExecResult.error("未知工具: " + name, List.of());
             };
@@ -206,11 +211,12 @@ public class AiToolExecutor {
 
     // ==================== tool implementations ====================
 
-    private ExecResult searchPatients(Map<String, Object> args, Long scopedPatientId) {
+    private ExecResult searchPatients(Map<String, Object> args, Long scopedPatientId, Long currentUserId) {
         if (scopedPatientId != null) {
-            // 已锁定患者：只返回当前患者
-            Patient p = patientMapper.selectById(scopedPatientId);
-            if (p == null) return ExecResult.error("未找到当前患者 (id=" + scopedPatientId + ")", List.of());
+            Patient p = requireOwnedPatient(scopedPatientId, currentUserId);
+            if (p == null) {
+                return ExecResult.error("未找到当前患者或无权访问该患者数据", List.of());
+            }
             return ExecResult.ok(List.of(patientToMap(p)),
                     List.of(source("patient", p, "查看患者档案")));
         }
@@ -218,7 +224,7 @@ public class AiToolExecutor {
         if (keyword == null || keyword.isBlank()) {
             keyword = "";
         }
-        List<Patient> list = patientMapper.searchByNameOrNo(keyword);
+        List<Patient> list = patientMapper.searchByNameOrNoForUser(keyword, currentUserId);
         if (list.size() > 20) list = list.subList(0, 20);
         List<Map<String, Object>> data = new ArrayList<>();
         for (Patient p : list) data.add(patientToMap(p));
@@ -315,18 +321,35 @@ public class AiToolExecutor {
 
     // ==================== helpers ====================
 
-    /** Wrap a patient-scoped tool, resolving effective patientId + patient name. */
+    /** Wrap a patient-scoped tool, resolving effective patientId + ownership check. */
     private ExecResult patientScoped(String name, String module, Map<String, Object> args,
-                                     Long scopedPatientId, PatientQuery fn) {
+                                     Long scopedPatientId, Long currentUserId, PatientQuery fn) {
         Long patientId = scopedPatientId != null ? scopedPatientId : longArg(args.get("patientId"));
         if (patientId == null) {
             return ExecResult.error("缺少患者参数 patientId（可先调用 search_patients 找到患者 id）", List.of());
         }
-        Patient p = patientMapper.selectById(patientId);
+        Patient p = requireOwnedPatient(patientId, currentUserId);
         if (p == null) {
-            return ExecResult.error("未找到患者 id=" + patientId, List.of());
+            return ExecResult.error("未找到患者或无权访问该患者数据", List.of());
         }
         return fn.apply(patientId, p, args);
+    }
+
+    /** Returns patient only when it exists and belongs to the current user. */
+    private Patient requireOwnedPatient(Long patientId, Long currentUserId) {
+        if (patientId == null || currentUserId == null) {
+            return null;
+        }
+        Patient p = patientMapper.selectById(patientId);
+        if (p == null || (p.getDeleted() != null && p.getDeleted() != 0)) {
+            return null;
+        }
+        if (p.getUserId() == null || !p.getUserId().equals(currentUserId)) {
+            log.warn("[AI] Blocked cross-user patient access: userId={}, patientId={}, ownerId={}",
+                    currentUserId, patientId, p.getUserId());
+            return null;
+        }
+        return p;
     }
 
     private AiToolSource source(String module, Patient p, String label) {

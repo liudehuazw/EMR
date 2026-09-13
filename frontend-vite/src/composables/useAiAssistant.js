@@ -7,7 +7,7 @@ import { usePatientScope } from '@/stores/usePatientScope';
 /**
  * AI assistant chat state + logic.
  * Scope rules:
- *  - 患者列表页 (/patients)          -> 可查询所有患者 (contextPatientId = null)
+ *  - 患者列表页 (/patients)          -> 仅当前用户的患者 (contextPatientId = null)
  *  - 患者详情页 (/patients/:id)      -> 锁定该患者
  *  - 病历/检验/影像/发票模块         -> 锁定"当前选中患者"（全局 patientScope，由各模块 tab 选择写入）
  */
@@ -60,7 +60,7 @@ export function useAiAssistant() {
   const scopeLabel = computed(() =>
     scoped.value
       ? `已锁定患者：${currentPatient.value?.name || '#' + contextPatientId.value}`
-      : '全部患者数据'
+      : '我的患者数据'
   );
 
   async function send(text) {

@@ -28,4 +28,12 @@ public interface PatientMapper extends BaseMapper<Patient> {
             + "AND (name LIKE CONCAT('%', #{keyword}, '%') OR patient_no LIKE CONCAT('%', #{keyword}, '%')) "
             + "ORDER BY name")
     List<Patient> searchByNameOrNo(@Param("keyword") String keyword);
+
+    /**
+     * Search patients by name or patient_no, scoped to the owning user.
+     */
+    @Select("SELECT * FROM patient WHERE deleted = 0 AND user_id = #{userId} "
+            + "AND (name LIKE CONCAT('%', #{keyword}, '%') OR patient_no LIKE CONCAT('%', #{keyword}, '%')) "
+            + "ORDER BY name")
+    List<Patient> searchByNameOrNoForUser(@Param("keyword") String keyword, @Param("userId") Long userId);
 }

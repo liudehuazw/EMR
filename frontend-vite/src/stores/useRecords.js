@@ -80,24 +80,30 @@ export const useRecordsStore = defineStore('records', () => {
 
   const updateRecord = async (record) => {
     const idx = medicalRecords.value.findIndex(r => r.id === record.id);
-    if (idx !== -1) { medicalRecords.value[idx] = { ...medicalRecords.value[idx], ...record }; save(); }
+    if (idx === -1) {
+      throw new Error('记录不存在');
+    }
+    medicalRecords.value[idx] = { ...medicalRecords.value[idx], ...record };
+    save();
+
     if (authStore.isDemoMode || !record.backendId) return;
-    try {
-      const payload = {
-        patientId: record.patientId,
-        visitDate: record.date,
-        hospital: record.hospital || '',
-        department: record.department || '',
-        doctor: record.doctor || '',
-        diagnosis: record.diagnosis || '',
-        symptoms: record.symptoms || '',
-        treatment: record.treatment || '',
-        notes: record.notes || '',
-        files: JSON.stringify(Array.isArray(record.files) ? record.files : [])
-      };
-      await updateMedicalRecord(record.backendId, payload);
-      console.log('[Records] Synced to backend (PUT):', record.backendId);
-    } catch (e) { console.warn('[Records] Backend update failed:', e); }
+
+    const payload = {
+      patientId: record.patientId,
+      visitDate: record.date,
+      hospital: record.hospital || '',
+      department: record.department || '',
+      doctor: record.doctor || '',
+      diagnosis: record.diagnosis || '',
+      symptoms: record.symptoms || '',
+      treatment: record.treatment || '',
+      notes: record.notes || '',
+      files: JSON.stringify(Array.isArray(record.files) ? record.files : [])
+    };
+    // 本地已保存，后台异步同步，避免 Redis/网络慢导致保存按钮一直转圈
+    updateMedicalRecord(record.backendId, payload)
+      .then(() => console.log('[Records] Synced to backend (PUT):', record.backendId))
+      .catch((e) => console.warn('[Records] Backend update failed:', e));
   };
 
   return { medicalRecords, selectedRecord, save, loadFromBackend, getPatientRecords, addRecord, updateRecord };

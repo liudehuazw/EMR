@@ -8,6 +8,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import com.medical.emr.dto.OcrTextUpdateRequest;
+
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -113,6 +115,19 @@ public class LabReportController {
             return ResponseEntity.ok(ApiResponse.success("检验报告更新成功", report));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(ApiResponse.error("更新检验报告失败: " + e.getMessage()));
+        }
+    }
+
+    @PatchMapping("/{id}/ocr-text")
+    public ResponseEntity<ApiResponse<Void>> updateOcrText(@PathVariable Long id,
+                                                         @RequestBody OcrTextUpdateRequest request) {
+        try {
+            labReportService.updateOcrText(id, request.getOcrRawText());
+            return ResponseEntity.ok(ApiResponse.success("OCR原文已保存"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("保存OCR原文失败: " + e.getMessage()));
         }
     }
 

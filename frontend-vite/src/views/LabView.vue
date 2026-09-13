@@ -58,7 +58,7 @@
         <div v-if="selectedReport">
           <!-- 操作按钮栏 -->
           <div class="action-bar">
-            <el-button size="small" style="background:#6366f1; color:white; border:none;" @click="triggerAiAnalysis" :loading="aiLoading"><img src="/pic/DeepSeek.png" style="height:14px; vertical-align:middle; margin-right:5px; filter:brightness(0) invert(1);" /> AI智能分析</el-button>
+            <el-button size="small" style="background:#6366f1; color:white; border:none;" @click="triggerAiAnalysis" :loading="aiLoading">💬 AI智能分析</el-button>
             <el-button size="small" type="warning" @click="reparseReport">🔄 重新解析OCR</el-button>
             <el-button size="small" style="background:#64748b; color:white; border:none;" @click="viewOcrText">📝 查看OCR原文</el-button>
             <el-button size="small" style="background:#8b5cf6; color:white; border:none;" @click="viewOriginal">📄 查看原报告</el-button>
@@ -106,7 +106,13 @@
       </div>
     </div>
 
-    <OcrTextDialog v-model:visible="ocrDialogVisible" :text="ocrText" />
+    <OcrTextDialog
+      v-model:visible="ocrDialogVisible"
+      :text="ocrText"
+      :report-id="selectedReport?.backendId"
+      report-type="lab"
+      @saved="onOcrSaved"
+    />
     <OriginalFileDialog
       v-model:visible="originalDialogVisible"
       :url="originalUrl"
@@ -319,6 +325,14 @@ const viewOcrText = () => {
   if (!selectedReport.value?.ocrRawText) { ElMessage.error('该报告没有OCR原文数据'); return; }
   ocrText.value = selectedReport.value.ocrRawText;
   ocrDialogVisible.value = true;
+};
+
+const onOcrSaved = (text) => {
+  ocrText.value = text;
+  if (selectedReport.value) {
+    selectedReport.value.ocrRawText = text;
+    labStore.updateReport(selectedReport.value);
+  }
 };
 
 const viewOriginal = () => {

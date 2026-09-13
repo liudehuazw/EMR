@@ -32,6 +32,10 @@
         <AppIcon name="user" :size="16" />
         {{ authStore.userInfo?.realName || '用户' }}
       </span>
+
+      <el-button class="navbar-action-btn" @click="showSettings = true">
+        ⚙ 系统设置
+      </el-button>
       <el-button
         v-if="!authStore.isDemoMode"
         class="navbar-action-btn"
@@ -64,6 +68,8 @@
       <el-button type="primary" @click="doChangePwd" :loading="pwdLoading">确认修改</el-button>
     </template>
   </el-dialog>
+
+  <SystemSettingsDialog v-model:visible="showSettings" />
 </template>
 
 <script setup>
@@ -72,6 +78,7 @@ import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '@/stores/useAuth';
 import { ElMessage } from 'element-plus';
 import AppIcon from '@/components/AppIcon.vue';
+import SystemSettingsDialog from '@/components/settings/SystemSettingsDialog.vue';
 import { useThemeTuner } from '@/composables/useThemeTuner';
 
 const router = useRouter();
@@ -80,6 +87,7 @@ const authStore = useAuthStore();
 const { getValue } = useThemeTuner();
 
 const showChangePwd = ref(false);
+const showSettings = ref(false);
 const pwdLoading = ref(false);
 const pwdForm = reactive({ oldPwd: '', newPwd: '', confirmPwd: '' });
 

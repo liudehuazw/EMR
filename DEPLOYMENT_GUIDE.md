@@ -114,8 +114,9 @@ mysql -u root -p < /opt/Electronic-medical-record/database/init.sql
 ### 3.2 已有旧库升级（保留数据）
 
 ```bash
-# V5 为幂等脚本，可重复执行，会补齐代码引用但旧脚本遗漏的字段
-mysql -u root -p emr_db < /opt/Electronic-medical-record/database/V5__fix_missing_columns.sql
+# 均为幂等脚本，可重复执行
+mysql -u root -p emr_db < /opt/Electronic-medical-record/database/V5__system_and_ai_config.sql
+mysql -u root -p emr_db < /opt/Electronic-medical-record/database/V6__fix_missing_columns.sql
 ```
 
 ### 3.3 （可选）创建专用数据库账号

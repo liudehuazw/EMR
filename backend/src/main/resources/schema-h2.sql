@@ -76,7 +76,6 @@ CREATE TABLE IF NOT EXISTS emr_medical_record (
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS emr_lab_report (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    user_id BIGINT,
     patient_id BIGINT NOT NULL,
     report_date DATE NOT NULL,
     test_name VARCHAR(255),
@@ -199,3 +198,24 @@ CREATE INDEX IF NOT EXISTS idx_inv_patient_id      ON emr_invoice (patient_id);
 CREATE INDEX IF NOT EXISTS idx_inv_invoice_date    ON emr_invoice (invoice_date);
 
 CREATE INDEX IF NOT EXISTS idx_mapping_user_id     ON emr_lab_item_mapping (user_id);
+
+-- ------------------------------------------------------------
+-- 系统配置与用户 AI 配置
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS emr_system_config (
+    config_key VARCHAR(64) PRIMARY KEY,
+    config_value VARCHAR(512) NOT NULL,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO emr_system_config (config_key, config_value) VALUES ('storage_type', 'oss');
+
+CREATE TABLE IF NOT EXISTS emr_user_ai_config (
+    user_id BIGINT PRIMARY KEY,
+    provider_type VARCHAR(32) NOT NULL DEFAULT 'openai_compatible',
+    preset VARCHAR(32) NOT NULL DEFAULT 'deepseek',
+    api_url VARCHAR(512) NOT NULL,
+    api_key VARCHAR(512),
+    model_id VARCHAR(128) NOT NULL,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

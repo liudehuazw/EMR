@@ -25,6 +25,9 @@ public class LabReportService extends ServiceImpl<LabReportMapper, LabReport> {
     @Autowired
     private LabReportItemMapper labReportItemMapper;
 
+    @Autowired
+    private FileCleanupHelper fileCleanupHelper;
+
     public List<LabReport> getReportsByPatientId(Long patientId) {
         String cacheKey = CACHE_PREFIX + ":" + patientId;
         if (cacheService != null) {
@@ -84,11 +87,24 @@ public class LabReportService extends ServiceImpl<LabReportMapper, LabReport> {
 
     @Transactional
     public void deleteReport(Long reportId) {
-        // Delete items first
+        LabReport report = getById(reportId);
+        if (report != null) {
+            fileCleanupHelper.deleteIfPresent(report.getFileUrl());
+        }
         labReportItemMapper.deleteByReportId(reportId);
-        // Delete report
         removeById(reportId);
-        // 清除缓存
+        if (cacheService != null) {
+            cacheService.deleteByPattern(CACHE_PREFIX + ":*");
+        }
+    }
+
+    public void updateOcrText(Long reportId, String ocrRawText) {
+        LabReport report = getById(reportId);
+        if (report == null) {
+            throw new IllegalArgumentException("检验报告不存在");
+        }
+        report.setOcrRawText(ocrRawText);
+        updateById(report);
         if (cacheService != null) {
             cacheService.deleteByPattern(CACHE_PREFIX + ":*");
         }
