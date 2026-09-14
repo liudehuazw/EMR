@@ -28,7 +28,11 @@
 
 Fresh installs: run `database/init.sql` only (includes all tables).
 
+### Changed (defaults)
+
+- Default file storage is **`local`** (was `oss`) for new installs and bootstrap config; existing databases keep their current `storage_type` until changed in system settings.
+
 ### Notes
 
 - Sensitive values (database passwords, OSS keys, AI API keys) remain in environment variables — never committed to the repository.
-- Default storage type in config is `oss`; switch to `local` in system settings for fully offline file handling.
+- **Default storage type is `local`** (files on server disk); configure `ALIYUN_OSS_*` and switch to OSS in system settings when cloud storage is needed.

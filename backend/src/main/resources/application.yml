@@ -60,7 +60,7 @@ jwt:
 file:
   upload-path: ./uploads/
   max-size: 52428800 # 50MB
-  storage-type: oss
+  storage-type: ${FILE_STORAGE_TYPE:local}
 
 # OCR服务配置
 ocr:

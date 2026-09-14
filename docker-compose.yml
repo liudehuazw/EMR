@@ -9,8 +9,8 @@
 #
 #  访问地址：http://localhost:8088     默认账号 admin / admin
 #
-#  可选：复制根目录 .env.example 为 .env，填写 OSS / AI Key 等真实配置，
-#        compose 会自动读取（不填也能启动，仅上传与 AI 功能不可用）。
+#  可选：复制根目录 .env.example 为 .env；默认本地存储，无需 OSS 即可上传。
+#        OCR 需 --profile ocr；AI 需在系统设置中配置。OSS 为可选增强。
 #
 #  注意：数据库初始化只在 mysql 数据卷为空的**首次**启动时执行，
 #        之后修改 init.sql 不会自动生效，需手动执行迁移脚本。
@@ -74,6 +74,7 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-emr_redis_2024}
       JWT_SECRET: ${JWT_SECRET:-emr-docker-dev-secret-change-me-at-least-32-bytes}
       FILE_UPLOAD_PATH: /app/uploads
+      FILE_STORAGE_TYPE: ${FILE_STORAGE_TYPE:-local}
       OCR_SERVICE_URL: http://ocr:8000
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       ALIYUN_OSS_ENDPOINT: ${ALIYUN_OSS_ENDPOINT:-}

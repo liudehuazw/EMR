@@ -14,7 +14,7 @@ public class SystemConfigService extends ServiceImpl<SystemConfigMapper, SystemC
 
     public static final String KEY_STORAGE_TYPE = "storage_type";
 
-    @Value("${file.storage-type:oss}")
+    @Value("${file.storage-type:local}")
     private String defaultStorageType;
 
     @PostConstruct

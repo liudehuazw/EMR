@@ -179,8 +179,9 @@ SPRING_DATASOURCE_PASSWORD=你的数据库密码
 # HS256 要求密钥 >= 32 字节，太短会导致登录直接失败
 JWT_SECRET=换成一串不少于32位的随机字符串
 
-# ---------- 文件上传 ----------
+# ---------- 文件上传（默认 local） ----------
 FILE_UPLOAD_PATH=/opt/Electronic-medical-record/uploads
+FILE_STORAGE_TYPE=local
 
 # ---------- Redis 缓存（可不配，连不上会自动降级为直接查库） ----------
 REDIS_HOST=127.0.0.1
@@ -192,7 +193,7 @@ REDIS_PASSWORD=你的Redis密码
 # 不配置也能启动，只是 AI 功能不可用
 DEEPSEEK_API_KEY=你的APIKey
 
-# ---------- 阿里云 OSS（文件存储） ----------
+# ---------- 阿里云 OSS（可选；系统设置切 OSS 时需配置） ----------
 ALIYUN_OSS_ENDPOINT=oss-cn-hangzhou.aliyuncs.com
 ALIYUN_OSS_ACCESS_KEY_ID=你的AccessKeyId
 ALIYUN_OSS_ACCESS_KEY_SECRET=你的AccessKeySecret
@@ -204,11 +205,11 @@ ALIYUN_OSS_BUCKET_NAME=你的Bucket名
 `application-prod.yml` 中以下变量没有默认值，缺失会导致**后端启动失败**：
 
 `SPRING_DATASOURCE_URL`、`SPRING_DATASOURCE_USERNAME`、`SPRING_DATASOURCE_PASSWORD`、
-`JWT_SECRET`、`DEEPSEEK_API_KEY`、`ALIYUN_OSS_ENDPOINT`、`ALIYUN_OSS_ACCESS_KEY_ID`、
-`ALIYUN_OSS_ACCESS_KEY_SECRET`、`ALIYUN_OSS_BUCKET_NAME`
+`JWT_SECRET`
 
-> 不想用 OSS 时，把四个 `ALIYUN_OSS_*` 写成空值（`ALIYUN_OSS_ENDPOINT=`）即可启动，
-> 只是头像/报告/发票的文件上传会失败。
+`DEEPSEEK_API_KEY` 与 `ALIYUN_OSS_*` 为**可选**（AI / OSS 功能）；默认 local 存储时**不填 OSS 也能上传**。
+
+> 需要 OSS 时在系统设置切换，并配置四个 `ALIYUN_OSS_*`。
 
 ### 环境变量排查经验
 
@@ -514,7 +515,7 @@ mysql -u root -p emr_db -e "SELECT username FROM sys_user"
 
 ```bash
 ls -la /opt/Electronic-medical-record/uploads/     # 目录是否存在且可写
-# 未配置 OSS 时，文件也可落到该目录；配置了 OSS 则还需检查 Bucket 的跨域(CORS)规则
+# 默认 local：检查 uploads 目录权限；若使用 OSS，检查 Bucket CORS
 ```
 
 ### OCR 识别超时 / 容器反复重启

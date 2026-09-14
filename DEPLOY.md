@@ -21,10 +21,9 @@
 ## 二、快速开始
 
 ```bash
-# 1.（可选）配置 OSS / AI Key 等敏感项
+# 1.（可选）复制 .env；默认 FILE_STORAGE_TYPE=local，无需 OSS 即可上传
 cp .env.example .env
-# 编辑 .env，填入 DEEPSEEK_API_KEY、ALIYUN_OSS_* 等
-# 不填也能启动，只是「文件上传」与「AI 分析/助手」不可用
+# 可选：DEEPSEEK_API_KEY、ALIYUN_OSS_*（系统设置切 OSS 时需要）
 
 # 2. 启动 MySQL + Redis + 后端 + 前端
 docker compose up -d
@@ -32,6 +31,8 @@ docker compose up -d
 # 3. 需要 OCR（图片/PDF 文字识别）时追加启动
 docker compose --profile ocr up -d
 ```
+
+默认**本地磁盘存储**（`uploads_data` 卷）。不填 OSS 也能上传头像/报告/发票；AI 需在系统设置中配置模型。
 
 首次启动会构建镜像（后端约 3~5 分钟，前端约 2 分钟；OCR 镜像约 10~20 分钟），
 构建完成后访问：
@@ -70,12 +71,14 @@ http://localhost:8088
 
 | 变量 | 必填 | 说明 |
 |------|------|------|
+| `FILE_STORAGE_TYPE` | 否 | 默认 `local`；bootstrap 用，运行时以系统设置为准 |
+| `FILE_UPLOAD_PATH` | 否 | 容器内默认 `/app/uploads` |
 | `MYSQL_ROOT_PASSWORD` | 否 | MySQL root 密码，默认 `emr_root_2024` |
 | `MYSQL_USER` / `MYSQL_PASSWORD` | 否 | 应用使用的数据库账号，默认 `emr` / `emr_password_2024` |
 | `REDIS_PASSWORD` | 否 | 默认 `emr_redis_2024` |
 | `JWT_SECRET` | 建议改 | HS256 要求 ≥ 32 字节 |
 | `DEEPSEEK_API_KEY` | 否 | 不填则 AI 报告分析与 AI 就诊助手不可用 |
-| `ALIYUN_OSS_ENDPOINT` / `_ACCESS_KEY_ID` / `_ACCESS_KEY_SECRET` / `_BUCKET_NAME` | 否 | 不填则头像/报告/发票文件无法上传 |
+| `ALIYUN_OSS_*` | 否 | **可选**；系统设置切到 OSS 时需填写 |
 
 > 生产环境请务必先改掉 `MYSQL_*`、`REDIS_PASSWORD`、`JWT_SECRET` 的默认值。
 
@@ -117,7 +120,7 @@ docker compose exec -T mysql mysql -uroot -p"$MYSQL_ROOT_PASSWORD" emr_db < back
 
 ```bash
 docker compose exec -T mysql mysql -uroot -p"$MYSQL_ROOT_PASSWORD" emr_db \
-  < database/V5__fix_missing_columns.sql
+  < database/V6__fix_missing_columns.sql
 ```
 
 ### 修改 admin 密码
@@ -152,7 +155,7 @@ docker build -t emr-ocr ./backend/ocr-service
 |------|------------|
 | 前端能打开但接口 404 | 后端容器未就绪，`docker compose logs -f backend` 等待启动完成；或改过 `context-path` |
 | 后端启动报缺环境变量 | `.env` 未创建或为空；`docker compose up -d` 前先 `cp .env.example .env` |
-| 上传文件失败 | 未配置 `ALIYUN_OSS_*`，或 OSS Bucket 未配置跨域（CORS）规则 |
+| 上传文件失败 | 检查 `uploads_data` 卷与后端日志；若使用 OSS，需在系统设置切到 OSS 并配置 `ALIYUN_OSS_*` |
 | AI 分析返回错误 | 未配置 `DEEPSEEK_API_KEY`，或额度/限流（前端会自动退避重试） |
 | OCR 请求超时 | 未启用 OCR 容器：`docker compose --profile ocr up -d`；多页 PDF 处理较慢（最长约 10 分钟） |
 | 容器反复重启 | `docker compose logs <服务>`；OCR 常见于内存不足，需给宿主机加内存或 swap |

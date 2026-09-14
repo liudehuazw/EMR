@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS emr_system_config (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统配置';
 
 INSERT INTO emr_system_config (config_key, config_value)
-VALUES ('storage_type', 'oss')
+VALUES ('storage_type', 'local')
 ON DUPLICATE KEY UPDATE config_value = config_value;
 
 -- 用户 AI 模型配置

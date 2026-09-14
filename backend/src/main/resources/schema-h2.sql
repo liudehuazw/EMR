@@ -208,7 +208,7 @@ CREATE TABLE IF NOT EXISTS emr_system_config (
     update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-INSERT INTO emr_system_config (config_key, config_value) VALUES ('storage_type', 'oss');
+INSERT INTO emr_system_config (config_key, config_value) VALUES ('storage_type', 'local');
 
 CREATE TABLE IF NOT EXISTS emr_user_ai_config (
     user_id BIGINT PRIMARY KEY,

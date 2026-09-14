@@ -76,7 +76,7 @@ const emit = defineEmits(['update:visible']);
 
 const authStore = useAuthStore();
 const activeTab = ref('ai');
-const storageType = ref('oss');
+const storageType = ref('local');
 const storageLoading = ref(false);
 
 const aiForm = ref({

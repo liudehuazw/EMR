@@ -63,6 +63,7 @@ jwt:
 file:
   upload-path: ${FILE_UPLOAD_PATH:/app/uploads}
   max-size: 52428800
+  storage-type: ${FILE_STORAGE_TYPE:local}
 
 # OCR 服务（容器内默认连接服务名 ocr）
 ocr:
@@ -78,7 +79,7 @@ zhipu:
     model: ${AI_MODEL:deepseek-v4-flash}
     timeout: ${AI_TIMEOUT:300000}
 
-# 阿里云 OSS（不配置时无法上传文件，其余功能正常）
+# 阿里云 OSS（可选；系统设置切 OSS 时需配置）
 aliyun:
   oss:
     endpoint: ${ALIYUN_OSS_ENDPOINT:}
