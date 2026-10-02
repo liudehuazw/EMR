@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { reactive, ref } from 'vue';
 import { fetchImagingReportsByPatient } from '@/api/imaging-reports';
 import { useAuthStore } from './useAuth';
+import { mergeWithUnsyncedLocal, samePatientId } from '@/utils/backendSync';
 
 export const useImagingStore = defineStore('imaging', () => {
   const authStore = useAuthStore();
@@ -31,26 +32,43 @@ export const useImagingStore = defineStore('imaging', () => {
 
   const loadFromBackend = async (patients) => {
     if (authStore.isDemoMode) return;
+    const previousLocal = [...imagingReports];
+    if (!patients?.length) {
+      if (previousLocal.length > 0) {
+        console.warn('[Imaging] No patients to load; keeping local imaging reports');
+      }
+      return;
+    }
     const all = [];
+    let failedPatients = 0;
     for (const p of patients) {
       try {
         const res = await fetchImagingReportsByPatient(p.id);
         if (res.code === 200 && res.data) {
-          // 【修复】后端返回reportDate，映射为前端date
           all.push(...res.data.map(r => ({
             ...r,
-            backendId: r.id,              // 关键：映射后端id到backendId，避免重复POST
+            backendId: r.id,
             date: r.reportDate || r.date
           })));
+        } else {
+          failedPatients += 1;
         }
-      } catch (e) { console.warn(`[Imaging] Load failed for patient ${p.id}:`, e); }
+      } catch (e) {
+        failedPatients += 1;
+        console.warn(`[Imaging] Load failed for patient ${p.id}:`, e);
+      }
     }
-    imagingReports.splice(0, imagingReports.length, ...all);
+    if (all.length === 0 && previousLocal.length > 0 && failedPatients === patients.length) {
+      console.warn('[Imaging] All backend loads failed; keeping local cache');
+      return;
+    }
+    const merged = mergeWithUnsyncedLocal(all, previousLocal);
+    imagingReports.splice(0, imagingReports.length, ...merged);
     save();
   };
 
   const getPatientReports = (patientId) =>
-    imagingReports.filter(r => r.patientId === patientId)
+    imagingReports.filter(r => samePatientId(r.patientId, patientId))
       .map(r => ({ ...r, date: r.date || r.reportDate })) // 【修复】兼容旧数据
       .sort((a, b) => new Date(b.date) - new Date(a.date));
 

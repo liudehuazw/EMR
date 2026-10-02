@@ -188,9 +188,24 @@ Docker 示例见 [`.env.example`](.env.example)。
 ```bash
 mysql -u root -p emr_db < database/V5__system_and_ai_config.sql
 mysql -u root -p emr_db < database/V6__fix_missing_columns.sql
+# 若升级前存在 patient.user_id 为 NULL 的旧数据（列表为空/无痕登录无患者）：
+mysql -u root -p emr_db < database/V6__backfill_patient_user_id.sql
 ```
 
 全新部署只需 `database/init.sql`。
+
+---
+
+## 常见问题（本地存储 / 同步）
+
+| 现象 | 处理 |
+|------|------|
+| 刷新后界面空、库里有数据 | 升级至含 `backendSync.js` 的前端；检查 `patient.user_id` 并执行 `V6__backfill_patient_user_id.sql` |
+| 预览 PDF 404 | Nginx 使用 `location ^~ /api/`（见 `frontend-vite/nginx.conf`）；宝塔外层勿缓存 `/api/files/` |
+| 删除病历无效 | 使用含 `deleteRecord()` 的版本；看 Network 中 DELETE 是否 200 |
+| 部署后约 1 分钟内 502 | 等待后端冷启动；Compose 见 `docker compose logs -f backend` |
+
+细节见 [CHANGELOG.md](CHANGELOG.md)（2026-09-24）与 [docs/LOCAL_STORAGE_SYNC_2026-09-24.md](docs/LOCAL_STORAGE_SYNC_2026-09-24.md)；自建 Nginx 部署见 [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)。
 
 ---
 

@@ -48,11 +48,12 @@ onMounted(async () => {
   try {
     // Verify token is still valid before loading data
     await patientsStore.loadFromBackend();
-    // Token valid: load remaining data in background
-    recordsStore.loadFromBackend(patientsStore.patients);
-    labStore.loadFromBackend(patientsStore.patients);
-    imagingStore.loadFromBackend(patientsStore.patients);
-    invoiceStore.loadFromBackend(patientsStore.patients);
+    await Promise.all([
+      recordsStore.loadFromBackend(patientsStore.patients),
+      labStore.loadFromBackend(patientsStore.patients),
+      imagingStore.loadFromBackend(patientsStore.patients),
+      invoiceStore.loadFromBackend(patientsStore.patients)
+    ]);
   } catch (e) {
     // Token expired or network error: authStore.logout() already called by apiRequest interceptor
     console.warn('[App] Refresh load failed, user logged out:', e.message);

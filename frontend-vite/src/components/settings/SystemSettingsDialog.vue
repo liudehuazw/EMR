@@ -36,7 +36,7 @@
             <el-input v-model="aiForm.apiUrl" placeholder="https://api.example.com/v1/chat/completions" />
           </el-form-item>
           <el-form-item label="模型 ID">
-            <el-input v-model="aiForm.modelId" placeholder="例如 deepseek-chat / qwen2.5:7b" />
+            <el-input v-model="aiForm.modelId" placeholder="例如 deepseek-flash / deepseek-v4-pro / qwen2.5:7b" />
           </el-form-item>
           <el-form-item label="API Key">
             <el-input v-model="aiForm.apiKey" type="password" show-password placeholder="留空则保持已保存的 Key" />

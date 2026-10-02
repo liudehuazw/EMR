@@ -7,6 +7,7 @@ import {
   deleteInvoice as deleteInvoiceApi
 } from '@/api/invoices';
 import { useAuthStore } from './useAuth';
+import { mergeWithUnsyncedLocal, parseJsonField, samePatientId } from '@/utils/backendSync';
 
 export const useInvoiceStore = defineStore('invoice', () => {
   const authStore = useAuthStore();
@@ -75,31 +76,48 @@ export const useInvoiceStore = defineStore('invoice', () => {
 
   const loadFromBackend = async (patients) => {
     if (authStore.isDemoMode) return;
+    const previousLocal = [...invoices];
+    if (!patients?.length) {
+      if (previousLocal.length > 0) {
+        console.warn('[Invoice] No patients to load; keeping local invoices');
+      }
+      return;
+    }
     const all = [];
+    let failedPatients = 0;
     for (const p of patients) {
       try {
         const res = await fetchInvoicesByPatient(p.id);
         if (res.code === 200 && res.data) {
-          // 【修复】解析可能为JSON字符串的items字段，并映射日期和文件URL字段
           all.push(...res.data.map(r => ({
             ...r,
-            backendId: r.id,              // 关键：映射后端id到backendId，避免重复POST
+            backendId: r.id,
             date: r.invoiceDate || r.date,
             fileUrl: r.fileUrl || r.file_url,
             ocrRawText: r.ocrRawText || r.ocr_raw_text || '',
             commercialReimbursed: !!(r.commercialReimbursed === 1 || r.commercialReimbursed === true),
             commercialAmount: r.commercialAmount != null ? String(r.commercialAmount) : '',
-            items: r.items ? (typeof r.items === 'string' ? JSON.parse(r.items) : r.items) : []
+            items: parseJsonField(r.items, []) || []
           })));
+        } else {
+          failedPatients += 1;
         }
-      } catch (e) { console.warn(`[Invoice] Load failed for patient ${p.id}:`, e); }
+      } catch (e) {
+        failedPatients += 1;
+        console.warn(`[Invoice] Load failed for patient ${p.id}:`, e);
+      }
     }
-    invoices.splice(0, invoices.length, ...all);
+    if (all.length === 0 && previousLocal.length > 0 && failedPatients === patients.length) {
+      console.warn('[Invoice] All backend loads failed; keeping local cache');
+      return;
+    }
+    const merged = mergeWithUnsyncedLocal(all, previousLocal);
+    invoices.splice(0, invoices.length, ...merged);
     save();
   };
 
   const getPatientInvoices = (patientId) =>
-    invoices.filter(inv => inv.patientId === patientId)
+    invoices.filter(inv => samePatientId(inv.patientId, patientId))
       .map(inv => ({ 
         ...inv, 
         date: inv.date || inv.invoiceDate, // 【修复】兼容旧数据日期字段

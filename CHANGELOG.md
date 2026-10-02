@@ -1,5 +1,35 @@
 # Changelog
 
+## 2026-09-24 — Local storage production fixes
+
+### Fixed
+
+- **Refresh wiping UI data**: `loadFromBackend` no longer replaces localStorage with empty API results when the backend fails or returns zero patients while local cache exists; unsynced local rows (no `backendId`) are merged after sync.
+- **Incognito / empty patient list**: `PatientService` lets admin see and claim `patient.user_id IS NULL` rows; migration `V6__backfill_patient_user_id.sql` for legacy DBs.
+- **Local file preview**: authenticated `fetch` → `blob:` URLs (`usePreviewDisplayUrl`, `loadPreviewDisplayUrl`); Spring `X-Frame-Options: SAMEORIGIN`; Nginx `location ^~ /api/` to avoid `.pdf` static rules stealing preview URLs.
+- **Medical record delete**: `deleteRecord()` in `useRecords` calls backend DELETE then removes local state; errors surfaced in UI (no silent `catch`).
+- **Login 502 after deploy**: clearer message in `auth.js`; remote deploy waits up to 120s for `/api/health` (cold start ~60s on small VMs).
+
+### Added
+
+- `frontend-vite/src/utils/backendSync.js`
+- `frontend-vite/src/composables/usePreviewDisplayUrl.js`
+- `scripts/diagnose-emr-backend.sh`, `scripts/patch-nginx-api-priority.sh`
+- `database/V6__backfill_patient_user_id.sql`
+
+### Changed
+
+- Stores: `usePatients`, `useRecords`, `useLab`, `useImaging`, `useInvoice`, `App.vue`, `LoginView.vue`, `RecordsView.vue`, related preview components
+- Backend: `PatientService`, `FileUploadController`, `LocalFileStorageStrategy`, `SecurityConfig`, `application-docker.yml`
+- `deploy-update.sh`, `frontend-vite/nginx.conf`, `scripts/deploy-config.ps1` (health wait loop)
+
+### Ops notes (self-hosted / Baota)
+
+- Set `FILE_UPLOAD_PATH` to a persistent directory; ensure inner (8088) and outer Nginx use `^~ /api/` for API and disable caching on `/api/files/`.
+- After `systemctl restart emr-backend`, wait for Tomcat before testing login (~60s on 256MB heap).
+
+---
+
 ## 2026-09 — System settings, AI config, and storage improvements
 
 ### Added
@@ -24,6 +54,7 @@
 | Script | Purpose |
 |--------|---------|
 | `V5__system_and_ai_config.sql` | Add system config and user AI config tables |
+| `V6__backfill_patient_user_id.sql` | Set `patient.user_id = 1` where NULL (legacy installs; adjust admin id if needed) |
 | `V6__fix_missing_columns.sql` | Backfill missing columns on existing databases (`table_data`, invoice `title`, patient fields) |
 
 Fresh installs: run `database/init.sql` only (includes all tables).

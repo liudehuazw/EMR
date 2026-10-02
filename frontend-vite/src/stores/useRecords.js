@@ -3,9 +3,11 @@ import { ref } from 'vue';
 import {
   fetchMedicalRecordsByPatient,
   createMedicalRecord,
-  updateMedicalRecord
+  updateMedicalRecord,
+  deleteMedicalRecord
 } from '@/api/medical-records';
 import { useAuthStore } from './useAuth';
+import { mergeWithUnsyncedLocal, parseJsonField, samePatientId } from '@/utils/backendSync';
 
 export const useRecordsStore = defineStore('records', () => {
   const authStore = useAuthStore();
@@ -25,9 +27,48 @@ export const useRecordsStore = defineStore('records', () => {
     localStorage.setItem('emr_medical_records', JSON.stringify(medicalRecords.value));
   };
 
+  const buildRecordPayload = (record) => ({
+    patientId: Number(record.patientId),
+    visitDate: record.date,
+    hospital: record.hospital || '',
+    department: record.department || '',
+    doctor: record.doctor || '',
+    diagnosis: record.diagnosis || '',
+    symptoms: record.symptoms || '',
+    treatment: record.treatment || '',
+    notes: record.notes || '',
+    files: JSON.stringify(Array.isArray(record.files) ? record.files : [])
+  });
+
+  const syncRecordToBackend = async (record) => {
+    if (authStore.isDemoMode || record.backendId) return;
+    try {
+      const res = await createMedicalRecord(buildRecordPayload(record));
+      if (res.code === 200 && res.data?.id) {
+        const idx = medicalRecords.value.findIndex(r => r.id === record.id);
+        if (idx !== -1) {
+          medicalRecords.value[idx].backendId = res.data.id;
+          medicalRecords.value[idx].id = res.data.id;
+          save();
+          console.log('[Records] Synced to backend (POST):', res.data.id);
+        }
+      }
+    } catch (e) {
+      console.warn('[Records] Backend sync failed:', e);
+    }
+  };
+
   const loadFromBackend = async (patients) => {
     if (authStore.isDemoMode) return;
+    const previousLocal = [...medicalRecords.value];
+    if (!patients?.length) {
+      if (previousLocal.length > 0) {
+        console.warn('[Records] No patients to load; keeping local medical records');
+      }
+      return;
+    }
     const all = [];
+    let failedPatients = 0;
     for (const p of patients) {
       try {
         const res = await fetchMedicalRecordsByPatient(p.id);
@@ -38,44 +79,77 @@ export const useRecordsStore = defineStore('records', () => {
             department: r.department || '', doctor: r.doctor || '',
             diagnosis: r.diagnosis || '', symptoms: r.symptoms || '',
             treatment: r.treatment || '', notes: r.notes || '',
-            files: r.files ? (typeof r.files === 'string' ? JSON.parse(r.files) : r.files) : []
+            files: parseJsonField(r.files, []) || []
           })));
+        } else {
+          failedPatients += 1;
         }
-      } catch (e) { console.warn(`[Records] Load failed for patient ${p.id}:`, e); }
+      } catch (e) {
+        failedPatients += 1;
+        console.warn(`[Records] Load failed for patient ${p.id}:`, e);
+      }
     }
-    medicalRecords.value = all;
-    localStorage.setItem('emr_medical_records', JSON.stringify(all));
+    if (all.length === 0 && previousLocal.length > 0 && failedPatients === patients.length) {
+      console.warn('[Records] All backend loads failed; keeping local cache');
+      return;
+    }
+    const merged = mergeWithUnsyncedLocal(all, previousLocal);
+    medicalRecords.value = merged;
+    localStorage.setItem('emr_medical_records', JSON.stringify(merged));
+    merged.filter((r) => !r.backendId).forEach((r) => { syncRecordToBackend(r); });
   };
 
   const getPatientRecords = (patientId) =>
-    medicalRecords.value.filter(r => r.patientId === patientId)
+    medicalRecords.value.filter(r => samePatientId(r.patientId, patientId))
       .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  const resolveBackendId = (record) => {
+    if (!record) return null;
+    if (record.backendId != null && record.backendId !== '') {
+      return Number(record.backendId);
+    }
+    const id = record.id;
+    if (typeof id === 'number' && id > 0) return id;
+    if (typeof id === 'string' && /^\d+$/.test(id)) return Number(id);
+    return null;
+  };
+
+  const removeLocalRecord = (record) => {
+    const backendId = resolveBackendId(record);
+    const before = medicalRecords.value.length;
+    medicalRecords.value = medicalRecords.value.filter((r) => {
+      if (r.id === record.id) return false;
+      if (backendId != null && (Number(r.backendId) === backendId || Number(r.id) === backendId)) {
+        return false;
+      }
+      return true;
+    });
+    if (medicalRecords.value.length === before) {
+      throw new Error('本地未找到该病历');
+    }
+    save();
+  };
+
+  const deleteRecord = async (record) => {
+    if (!record) throw new Error('记录不存在');
+    if (authStore.isDemoMode) {
+      removeLocalRecord(record);
+      return;
+    }
+    const backendId = resolveBackendId(record);
+    if (backendId) {
+      const res = await deleteMedicalRecord(backendId);
+      if (res.code !== 200) {
+        throw new Error(res.message || '服务器删除失败');
+      }
+    }
+    removeLocalRecord(record);
+  };
 
   const addRecord = async (record) => {
     medicalRecords.value.push(record);
     save();
-    if (authStore.isDemoMode) return;
-    try {
-      const payload = {
-        patientId: record.patientId,
-        visitDate: record.date,
-        hospital: record.hospital || '',
-        department: record.department || '',
-        doctor: record.doctor || '',
-        diagnosis: record.diagnosis || '',
-        symptoms: record.symptoms || '',
-        treatment: record.treatment || '',
-        notes: record.notes || '',
-        files: JSON.stringify(Array.isArray(record.files) ? record.files : [])
-      };
-      const res = await createMedicalRecord(payload);
-      if (res.code === 200 && res.data?.id) {
-        const idx = medicalRecords.value.findIndex(r => r.id === record.id);
-        if (idx !== -1) medicalRecords.value[idx].backendId = res.data.id;
-        save();
-        console.log('[Records] Synced to backend (POST):', res.data.id);
-      }
-    } catch (e) { console.warn('[Records] Backend sync failed:', e); }
+    await syncRecordToBackend(record);
   };
 
   const updateRecord = async (record) => {
@@ -88,23 +162,11 @@ export const useRecordsStore = defineStore('records', () => {
 
     if (authStore.isDemoMode || !record.backendId) return;
 
-    const payload = {
-      patientId: record.patientId,
-      visitDate: record.date,
-      hospital: record.hospital || '',
-      department: record.department || '',
-      doctor: record.doctor || '',
-      diagnosis: record.diagnosis || '',
-      symptoms: record.symptoms || '',
-      treatment: record.treatment || '',
-      notes: record.notes || '',
-      files: JSON.stringify(Array.isArray(record.files) ? record.files : [])
-    };
-    // 本地已保存，后台异步同步，避免 Redis/网络慢导致保存按钮一直转圈
+    const payload = buildRecordPayload(record);
     updateMedicalRecord(record.backendId, payload)
       .then(() => console.log('[Records] Synced to backend (PUT):', record.backendId))
       .catch((e) => console.warn('[Records] Backend update failed:', e));
   };
 
-  return { medicalRecords, selectedRecord, save, loadFromBackend, getPatientRecords, addRecord, updateRecord };
+  return { medicalRecords, selectedRecord, save, loadFromBackend, getPatientRecords, addRecord, updateRecord, deleteRecord };
 });

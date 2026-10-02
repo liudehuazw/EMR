@@ -69,7 +69,7 @@ zhipu:
   ai:
     api-key: ${DEEPSEEK_API_KEY}
     api-url: https://api.deepseek.com/v1/chat/completions
-    model: deepseek-v4-flash
+    model: deepseek-flash
     timeout: ${DEEPSEEK_API_KEY_TIMEOUT:300000}
 
 # Alibaba Cloud OSS configuration

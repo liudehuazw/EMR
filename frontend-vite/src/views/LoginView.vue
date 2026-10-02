@@ -664,6 +664,7 @@
 <script setup>
 import { ref, nextTick, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { ElMessage } from 'element-plus';
 import { useAuthStore } from '@/stores/useAuth';
 import AppIcon from '@/components/AppIcon.vue';
 import { usePatientsStore } from '@/stores/usePatients';
@@ -710,18 +711,22 @@ const handleLogin = async () => {
   }
 
   const result = await authStore.login(async (isDemo) => {
-    // 【修复】先跳转页面，再后台异步加载数据，避免等待5秒
+    if (!isDemo) {
+      try {
+        await patientsStore.loadFromBackend();
+        await Promise.all([
+          recordsStore.loadFromBackend(patientsStore.patients),
+          labStore.loadFromBackend(patientsStore.patients),
+          imagingStore.loadFromBackend(patientsStore.patients),
+          invoiceStore.loadFromBackend(patientsStore.patients)
+        ]);
+      } catch (e) {
+        console.error('[Login] Sync from backend failed:', e);
+        ElMessage.error('从服务器加载数据失败：' + (e.message || '请刷新页面重试'));
+      }
+    }
     await nextTick();
     router.replace({ name: 'Patients' });
-    if (!isDemo) {
-      // Real login: sync all data from backend in background
-      patientsStore.loadFromBackend().then(() => {
-        recordsStore.loadFromBackend(patientsStore.patients);
-        labStore.loadFromBackend(patientsStore.patients);
-        imagingStore.loadFromBackend(patientsStore.patients);
-        invoiceStore.loadFromBackend(patientsStore.patients);
-      });
-    }
   });
   if (result?.error) {
     errorMsg.value = result.error;

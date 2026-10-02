@@ -76,7 +76,7 @@ zhipu:
   ai:
     api-key: ${DEEPSEEK_API_KEY:}
     api-url: ${AI_API_URL:https://api.deepseek.com/v1/chat/completions}
-    model: ${AI_MODEL:deepseek-v4-flash}
+    model: ${AI_MODEL:deepseek-flash}
     timeout: ${AI_TIMEOUT:300000}
 
 # 阿里云 OSS（可选；系统设置切 OSS 时需配置）

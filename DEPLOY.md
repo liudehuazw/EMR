@@ -121,6 +121,10 @@ docker compose exec -T mysql mysql -uroot -p"$MYSQL_ROOT_PASSWORD" emr_db < back
 ```bash
 docker compose exec -T mysql mysql -uroot -p"$MYSQL_ROOT_PASSWORD" emr_db \
   < database/V6__fix_missing_columns.sql
+
+# 旧库患者无 user_id 时（列表为空）：
+docker compose exec -T mysql mysql -uroot -p"$MYSQL_ROOT_PASSWORD" emr_db \
+  < database/V6__backfill_patient_user_id.sql
 ```
 
 ### 修改 admin 密码
@@ -160,6 +164,8 @@ docker build -t emr-ocr ./backend/ocr-service
 | OCR 请求超时 | 未启用 OCR 容器：`docker compose --profile ocr up -d`；多页 PDF 处理较慢（最长约 10 分钟） |
 | 容器反复重启 | `docker compose logs <服务>`；OCR 常见于内存不足，需给宿主机加内存或 swap |
 | 改了 `init.sql` 但没生效 | 初始化只在 mysql 数据卷为空时执行，需 `docker compose down -v` 重建（会清空数据）或手动执行迁移脚本 |
+| 刷新后数据不见 | 多为 API 返回空列表；执行 `V6__backfill_patient_user_id.sql`；确保前端含 `backendSync.js` 安全合并逻辑 |
+| PDF 预览失败 | 容器内 Nginx 已用 `^~ /api/`；自建反代勿用 `*.pdf` 静态规则覆盖 `/api/files/preview/` |
 | 端口冲突 | 修改 `docker-compose.yml` 中 `ports` 左侧端口 |
 
 ---
@@ -172,4 +178,4 @@ docker build -t emr-ocr ./backend/ocr-service
 
 ---
 
-*最后更新：2026-09*
+*最后更新：2026-09-24*

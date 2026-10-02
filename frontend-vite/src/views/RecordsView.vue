@@ -249,15 +249,17 @@ const confirmDeleteRecord = async () => {
   if (!selectedRecord.value) return;
   try {
     await ElMessageBox.confirm('确认删除该病历记录？此操作不可恢复。', '删除确认', { type: 'warning' });
-    const record = selectedRecord.value;
-    if (record.backendId) {
-      try { await deleteMedicalRecord(record.backendId); } catch (_) {}
-    }
-    const idx = recordsStore.medicalRecords.findIndex(r => r.id === record.id);
-    if (idx !== -1) { recordsStore.medicalRecords.splice(idx, 1); recordsStore.save(); }
+  } catch {
+    return;
+  }
+  try {
+    await recordsStore.deleteRecord(selectedRecord.value);
     selectedRecordId.value = null;
     ElMessage.success('病历已删除');
-  } catch (_) {}
+  } catch (e) {
+    console.error('[Records] Delete failed:', e);
+    ElMessage.error(e.message || '删除失败');
+  }
 };
 
 // ===== 上传病历 =====

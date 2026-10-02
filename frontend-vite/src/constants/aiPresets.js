@@ -4,7 +4,7 @@ export const AI_PRESETS = [
     label: 'DeepSeek',
     providerType: 'openai_compatible',
     apiUrl: 'https://api.deepseek.com/v1/chat/completions',
-    modelId: 'deepseek-chat'
+    modelId: 'deepseek-flash'
   },
   {
     id: 'qwen',

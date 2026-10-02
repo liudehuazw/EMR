@@ -7,6 +7,7 @@ import {
   deleteLabReport
 } from '@/api/lab-reports';
 import { useAuthStore } from './useAuth';
+import { mergeWithUnsyncedLocal, parseJsonField, samePatientId } from '@/utils/backendSync';
 
 export const useLabStore = defineStore('lab', () => {
   const authStore = useAuthStore();
@@ -40,26 +41,44 @@ export const useLabStore = defineStore('lab', () => {
 
   const loadFromBackend = async (patients) => {
     if (authStore.isDemoMode) return;
+    const previousLocal = [...labReports];
+    if (!patients?.length) {
+      if (previousLocal.length > 0) {
+        console.warn('[Lab] No patients to load; keeping local lab reports');
+      }
+      return;
+    }
     const all = [];
+    let failedPatients = 0;
     for (const p of patients) {
       try {
         const res = await fetchLabReportsByPatient(p.id);
         if (res.code === 200 && res.data) {
           all.push(...res.data.map(r => ({
             ...r,
-            backendId: r.id,              // 关键：映射后端id到backendId，避免重复POST
+            backendId: r.id,
             date: r.reportDate || r.date,
-            tableData: r.tableData ? (typeof r.tableData === 'string' ? JSON.parse(r.tableData) : r.tableData) : []
+            tableData: parseJsonField(r.tableData, []) || []
           })));
+        } else {
+          failedPatients += 1;
         }
-      } catch (e) { console.warn(`[Lab] Load failed for patient ${p.id}:`, e); }
+      } catch (e) {
+        failedPatients += 1;
+        console.warn(`[Lab] Load failed for patient ${p.id}:`, e);
+      }
     }
-    labReports.splice(0, labReports.length, ...all);
+    if (all.length === 0 && previousLocal.length > 0 && failedPatients === patients.length) {
+      console.warn('[Lab] All backend loads failed; keeping local cache');
+      return;
+    }
+    const merged = mergeWithUnsyncedLocal(all, previousLocal);
+    labReports.splice(0, labReports.length, ...merged);
     save();
   };
 
   const getPatientReports = (patientId) =>
-    labReports.filter(r => r.patientId === patientId)
+    labReports.filter(r => samePatientId(r.patientId, patientId))
       .map(r => ({ ...r, date: r.date || r.reportDate })) // 【修复】兼容旧数据，确保date字段存在
       .sort((a, b) => new Date(a.date) - new Date(b.date));
 

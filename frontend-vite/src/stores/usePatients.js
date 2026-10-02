@@ -3,6 +3,7 @@ import { reactive, ref } from 'vue';
 import { fetchPatients, createPatient, updatePatient as apiUpdatePatient, deletePatient as apiDeletePatient } from '@/api/patients';
 import { useAuthStore } from './useAuth';
 import { generateId } from '@/utils/index';
+import { shouldReplacePatientListFromBackend } from '@/utils/backendSync';
 
 export const usePatientsStore = defineStore('patients', () => {
   const authStore = useAuthStore();
@@ -16,7 +17,6 @@ export const usePatientsStore = defineStore('patients', () => {
   };
   _load();
 
-  // Only keep real URLs (http/https), filter out base64 data URLs
   const _extractUrl = (val) => (val && val.startsWith('http') ? val : '');
 
   const save = () => {
@@ -27,18 +27,27 @@ export const usePatientsStore = defineStore('patients', () => {
   const loadFromBackend = async () => {
     if (authStore.isDemoMode) return;
     const res = await fetchPatients();
-    if (res.code === 200 && res.data?.records) {
-      const list = res.data.records.map(p => ({
+    if (res.code !== 200) {
+      throw new Error(res.message || '加载患者列表失败');
+    }
+    if (res.data?.records == null) {
+      throw new Error('患者列表格式异常');
+    }
+    const apiTotal = res.data.total ?? res.data.records.length;
+    if (!shouldReplacePatientListFromBackend(apiTotal, patients.length)) {
+      console.warn('[Patients] Backend patient list empty but local cache has data; keeping local cache');
+      return;
+    }
+    const list = res.data.records.map(p => ({
         id: p.id, patientNo: p.patientNo, name: p.name,
         gender: Number(p.gender), birthDate: p.birthDate,
         phone: p.phone, idCard: p.idCard, address: p.address,
         emergencyContact: p.emergencyContact, emergencyPhone: p.emergencyPhone,
         allergyHistory: p.allergyHistory, medicalHistory: p.medicalHistory,
         avatar: p.avatarUrl || '', avatarUrl: p.avatarUrl || ''
-      }));
-      patients.splice(0, patients.length, ...list);
-      localStorage.setItem('emr_patients', JSON.stringify(patients));
-    }
+    }));
+    patients.splice(0, patients.length, ...list);
+    localStorage.setItem('emr_patients', JSON.stringify(patients));
   };
 
   const addPatient = async (form) => {
@@ -67,7 +76,6 @@ export const usePatientsStore = defineStore('patients', () => {
     if (idx !== -1) { patients.splice(idx, 1, { ...updatedPatient }); save(); }
     if (!authStore.isDemoMode) {
       try {
-        // Only send backend-expected fields (PatientForm DTO)
         const payload = {
           name: updatedPatient.name, gender: updatedPatient.gender,
           birthDate: updatedPatient.birthDate, phone: updatedPatient.phone,

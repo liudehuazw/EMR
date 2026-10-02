@@ -30,7 +30,7 @@ public class UserAiConfigService extends ServiceImpl<UserAiConfigMapper, UserAiC
     @Value("${zhipu.ai.api-url:https://api.deepseek.com/v1/chat/completions}")
     private String defaultApiUrl;
 
-    @Value("${zhipu.ai.model:deepseek-chat}")
+    @Value("${zhipu.ai.model:deepseek-flash}")
     private String defaultModel;
 
     @Value("${zhipu.ai.timeout:300000}")

@@ -486,6 +486,32 @@ echo "--- OOM  ---";    dmesg | grep -i "oom\|killed" | tail -3 || echo "无"
 
 ## 十一、常见问题排查
 
+### 刷新后病历/检验/发票“消失”（库里有数据）
+
+多为 **前端用空 API 结果覆盖 localStorage**，或 **患者列表被 `user_id` 过滤为空**（无痕窗口无本地缓存时更明显）。
+
+```bash
+mysql -u root -p emr_db -e "SELECT COUNT(*) FROM patient WHERE user_id IS NULL;"
+mysql -u root -p emr_db < database/V6__backfill_patient_user_id.sql
+curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/api/health
+```
+
+升级前端至含 `backendSync.js` 的版本；细节见 `CHANGELOG.md`（2026-09-24）。
+
+### 本地存储上传后预览 404
+
+- Nginx 使用 `location ^~ /api/`（见 `frontend-vite/nginx.conf`），避免 `*.pdf` 静态规则拦截 `/api/files/preview/`。
+- 宝塔外层对 `/api/files/` 关闭 `proxy_cache`。
+- 脚本：`bash scripts/patch-nginx-api-priority.sh`。
+
+### 重启后端后短暂 502
+
+小内存 VM 冷启动约 60s；`scripts/deploy-config.ps1` 远程部署会轮询 `/api/health` 最多 120s。手动重启后执行 `bash scripts/diagnose-emr-backend.sh`。
+
+### 删除病历无提示
+
+需含 `useRecords.deleteRecord()` 的前端；Network 中 DELETE 应返回 200。
+
 ### 后端起不来
 
 ```bash
