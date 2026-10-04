@@ -14,7 +14,7 @@
 
 此项目解决了我的个人痛点，也希望可以帮助其他人。项目MIT协议完全开源，欢迎使用，欢迎二次开发。
 
-![Uploading ScreenShot_2026-10-04_221815_309.png…]()
+<img width="2560" height="1046" alt="ScreenShot_2026-10-04_221815_309" src="https://github.com/user-attachments/assets/139f333b-e756-4c85-9770-ef277bcc4620" />
 
 ---
 
