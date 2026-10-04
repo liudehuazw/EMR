@@ -31,6 +31,7 @@ import NavBar from '@/components/NavBar.vue';
 import AiAssistantWidget from '@/components/ai/AiAssistantWidget.vue';
 import ThemeTunerPanel from '@/components/dev/ThemeTunerPanel.vue';
 import { isThemeTunerEnabled } from '@/config/design-tokens';
+import { syncAllFromBackend } from '@/utils/syncFromBackend';
 
 const themeTunerEnabled = isThemeTunerEnabled();
 
@@ -43,21 +44,18 @@ const recordsStore = useRecordsStore();
 
 // On page refresh: if already logged in, verify token then reload all data from backend
 // This prevents stale localStorage cache from accumulating duplicates
-onMounted(async () => {
+onMounted(() => {
   if (!authStore.isLoggedIn || authStore.isDemoMode) return;
-  try {
-    // Verify token is still valid before loading data
-    await patientsStore.loadFromBackend();
-    await Promise.all([
-      recordsStore.loadFromBackend(patientsStore.patients),
-      labStore.loadFromBackend(patientsStore.patients),
-      imagingStore.loadFromBackend(patientsStore.patients),
-      invoiceStore.loadFromBackend(patientsStore.patients)
-    ]);
-  } catch (e) {
-    // Token expired or network error: authStore.logout() already called by apiRequest interceptor
+  syncAllFromBackend({
+    authStore,
+    patientsStore,
+    recordsStore,
+    labStore,
+    imagingStore,
+    invoiceStore
+  }).catch((e) => {
     console.warn('[App] Refresh load failed, user logged out:', e.message);
-  }
+  });
 });
 </script>
 

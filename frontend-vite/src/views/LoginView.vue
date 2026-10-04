@@ -672,6 +672,7 @@ import { useLabStore } from '@/stores/useLab';
 import { useImagingStore } from '@/stores/useImaging';
 import { useInvoiceStore } from '@/stores/useInvoice';
 import { useRecordsStore } from '@/stores/useRecords';
+import { syncAllFromBackend } from '@/utils/syncFromBackend';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -711,22 +712,21 @@ const handleLogin = async () => {
   }
 
   const result = await authStore.login(async (isDemo) => {
+    await nextTick();
+    await router.replace({ name: 'Patients' });
     if (!isDemo) {
-      try {
-        await patientsStore.loadFromBackend();
-        await Promise.all([
-          recordsStore.loadFromBackend(patientsStore.patients),
-          labStore.loadFromBackend(patientsStore.patients),
-          imagingStore.loadFromBackend(patientsStore.patients),
-          invoiceStore.loadFromBackend(patientsStore.patients)
-        ]);
-      } catch (e) {
+      syncAllFromBackend({
+        authStore,
+        patientsStore,
+        recordsStore,
+        labStore,
+        imagingStore,
+        invoiceStore
+      }).catch((e) => {
         console.error('[Login] Sync from backend failed:', e);
         ElMessage.error('从服务器加载数据失败：' + (e.message || '请刷新页面重试'));
-      }
+      });
     }
-    await nextTick();
-    router.replace({ name: 'Patients' });
   });
   if (result?.error) {
     errorMsg.value = result.error;

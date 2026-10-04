@@ -10,7 +10,11 @@
     </div>
 
     <!-- 患者卡片网格 -->
-    <div class="patient-grid">
+    <div
+      class="patient-grid"
+      v-loading="backendSyncInProgress"
+      element-loading-text="正在同步服务器数据…"
+    >
       <div v-for="(patient, idx) in patientsStore.patients" :key="patient.id"
         class="patient-card" @click="viewDetail(patient)"
         :style="{ animationDelay: idx * 50 + 'ms' }">
@@ -134,6 +138,7 @@ import { useImagingStore } from '@/stores/useImaging';
 import { useInvoiceStore } from '@/stores/useInvoice';
 import { useRecordsStore } from '@/stores/useRecords';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import { backendSyncInProgress } from '@/utils/syncFromBackend';
 
 const router = useRouter();
 const patientsStore = usePatientsStore();
