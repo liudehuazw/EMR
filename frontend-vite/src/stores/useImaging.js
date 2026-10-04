@@ -41,22 +41,30 @@ export const useImagingStore = defineStore('imaging', () => {
     }
     const all = [];
     let failedPatients = 0;
-    for (const p of patients) {
-      try {
-        const res = await fetchImagingReportsByPatient(p.id);
-        if (res.code === 200 && res.data) {
-          all.push(...res.data.map(r => ({
-            ...r,
-            backendId: r.id,
-            date: r.reportDate || r.date
-          })));
-        } else {
-          failedPatients += 1;
+    const chunks = await Promise.all(
+      patients.map(async (p) => {
+        try {
+          const res = await fetchImagingReportsByPatient(p.id);
+          if (res.code === 200 && res.data) {
+            return {
+              ok: true,
+              rows: res.data.map(r => ({
+                ...r,
+                backendId: r.id,
+                date: r.reportDate || r.date
+              }))
+            };
+          }
+          return { ok: false };
+        } catch (e) {
+          console.warn(`[Imaging] Load failed for patient ${p.id}:`, e);
+          return { ok: false };
         }
-      } catch (e) {
-        failedPatients += 1;
-        console.warn(`[Imaging] Load failed for patient ${p.id}:`, e);
-      }
+      })
+    );
+    for (const c of chunks) {
+      if (c.ok) all.push(...c.rows);
+      else failedPatients += 1;
     }
     if (all.length === 0 && previousLocal.length > 0 && failedPatients === patients.length) {
       console.warn('[Imaging] All backend loads failed; keeping local cache');

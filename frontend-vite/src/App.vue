@@ -53,7 +53,7 @@ onMounted(() => {
     labStore,
     imagingStore,
     invoiceStore
-  }).catch((e) => {
+  }, { mode: 'background' }).catch((e) => {
     console.warn('[App] Refresh load failed, user logged out:', e.message);
   });
 });

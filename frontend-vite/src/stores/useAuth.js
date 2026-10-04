@@ -97,6 +97,9 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('emr_token');
     localStorage.removeItem('emr_user_info');
     localStorage.removeItem('emr_current_view');
+    try {
+      localStorage.removeItem('emr_last_full_sync_at');
+    } catch (_) { /* ignore */ }
     isLoggedIn.value = false;
     isDemoMode.value = false;
     userInfo.value = null;

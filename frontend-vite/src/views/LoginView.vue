@@ -722,6 +722,9 @@ const handleLogin = async () => {
         labStore,
         imagingStore,
         invoiceStore
+      }, {
+        force: true,
+        mode: patientsStore.patients.length === 0 ? 'interactive' : 'background'
       }).catch((e) => {
         console.error('[Login] Sync from backend failed:', e);
         ElMessage.error('从服务器加载数据失败：' + (e.message || '请刷新页面重试'));

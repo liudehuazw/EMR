@@ -85,27 +85,35 @@ export const useInvoiceStore = defineStore('invoice', () => {
     }
     const all = [];
     let failedPatients = 0;
-    for (const p of patients) {
-      try {
-        const res = await fetchInvoicesByPatient(p.id);
-        if (res.code === 200 && res.data) {
-          all.push(...res.data.map(r => ({
-            ...r,
-            backendId: r.id,
-            date: r.invoiceDate || r.date,
-            fileUrl: r.fileUrl || r.file_url,
-            ocrRawText: r.ocrRawText || r.ocr_raw_text || '',
-            commercialReimbursed: !!(r.commercialReimbursed === 1 || r.commercialReimbursed === true),
-            commercialAmount: r.commercialAmount != null ? String(r.commercialAmount) : '',
-            items: parseJsonField(r.items, []) || []
-          })));
-        } else {
-          failedPatients += 1;
+    const chunks = await Promise.all(
+      patients.map(async (p) => {
+        try {
+          const res = await fetchInvoicesByPatient(p.id);
+          if (res.code === 200 && res.data) {
+            return {
+              ok: true,
+              rows: res.data.map(r => ({
+                ...r,
+                backendId: r.id,
+                date: r.invoiceDate || r.date,
+                fileUrl: r.fileUrl || r.file_url,
+                ocrRawText: r.ocrRawText || r.ocr_raw_text || '',
+                commercialReimbursed: !!(r.commercialReimbursed === 1 || r.commercialReimbursed === true),
+                commercialAmount: r.commercialAmount != null ? String(r.commercialAmount) : '',
+                items: parseJsonField(r.items, []) || []
+              }))
+            };
+          }
+          return { ok: false };
+        } catch (e) {
+          console.warn(`[Invoice] Load failed for patient ${p.id}:`, e);
+          return { ok: false };
         }
-      } catch (e) {
-        failedPatients += 1;
-        console.warn(`[Invoice] Load failed for patient ${p.id}:`, e);
-      }
+      })
+    );
+    for (const c of chunks) {
+      if (c.ok) all.push(...c.rows);
+      else failedPatients += 1;
     }
     if (all.length === 0 && previousLocal.length > 0 && failedPatients === patients.length) {
       console.warn('[Invoice] All backend loads failed; keeping local cache');

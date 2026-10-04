@@ -12,7 +12,7 @@
     <!-- 患者卡片网格 -->
     <div
       class="patient-grid"
-      v-loading="backendSyncInProgress"
+      v-loading="backendSyncVisible"
       element-loading-text="正在同步服务器数据…"
     >
       <div v-for="(patient, idx) in patientsStore.patients" :key="patient.id"
@@ -138,7 +138,7 @@ import { useImagingStore } from '@/stores/useImaging';
 import { useInvoiceStore } from '@/stores/useInvoice';
 import { useRecordsStore } from '@/stores/useRecords';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { backendSyncInProgress } from '@/utils/syncFromBackend';
+import { backendSyncVisible } from '@/utils/syncFromBackend';
 
 const router = useRouter();
 const patientsStore = usePatientsStore();
