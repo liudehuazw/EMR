@@ -57,6 +57,17 @@ public class MedicalRecordService extends ServiceImpl<MedicalRecordMapper, Medic
         cacheService.delete(CACHE_PREFIX + ":count:" + patientId);
     }
 
+    /**
+     * 批量统计多个患者的病历数（一次 GROUP BY 查询，避免 N+1）。
+     * 不缓存：用于患者列表页实时统计。
+     */
+    public java.util.List<java.util.Map<String, Object>> countByPatientIds(java.util.List<Long> patientIds) {
+        if (patientIds == null || patientIds.isEmpty()) {
+            return java.util.List.of();
+        }
+        return baseMapper.countByPatientIds(patientIds);
+    }
+
     public boolean save(MedicalRecord record) {
         boolean result = super.save(record);
         evictCache(record.getPatientId());

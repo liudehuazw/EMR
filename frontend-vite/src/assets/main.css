@@ -111,7 +111,8 @@ html {
   text-size-adjust: 100% !important;
 }
 body {
-  font-family: 'Noto Sans SC', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
+  /* 系统字体栈：不请求外部 Web 字体，首屏零字体延迟（iOS/Android 中文渲染良好） */
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
   background: var(--color-bg);
   color: var(--color-text);
   min-height: 100vh;

@@ -37,9 +37,16 @@ public class PatientController {
     private UserService userService;
 
     /**
-     * Resolve current logged-in user ID from JWT username.
+     * Resolve current logged-in user ID.
+     * <p>
+     * 优先使用 JWT claims 中的 userId（由 JwtAuthenticationFilter 放入 UserPrincipal），
+     * 避免每个请求再查一次用户表；仅在旧 token 无 userId 时才回退查库。
      */
     private Long getCurrentUserId() {
+        Long userId = SecurityUtils.getCurrentUserId();
+        if (userId != null) {
+            return userId;
+        }
         String username = SecurityUtils.getCurrentUsername();
         if (username == null) {
             return null;

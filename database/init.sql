@@ -32,10 +32,12 @@ CREATE TABLE IF NOT EXISTS sys_user (
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统用户表';
 
--- 默认管理员账户 admin / admin
--- 如需更换密码：见 DEPLOYMENT_GUIDE.md「默认账户」章节
+-- 默认管理员账户 admin
+-- ⚠️ 出于安全考虑，这里不预置任何可用的密码哈希（避免公开仓携带默认口令）。
+-- 部署后请按 DEPLOYMENT_GUIDE.md「3.4 默认账户」生成 BCrypt 哈希并写入，
+-- 未设置前该账户无法登录。
 INSERT INTO sys_user (username, password, real_name, status)
-SELECT 'admin', '$2a$10$qc0XWDusfUWHehalERruPusWQ19UbahC5G0qKsbjSSdFfhpV507T2', '系统管理员', 1
+SELECT 'admin', '<首次部署后由你生成的BCrypt哈希>', '系统管理员', 1
 WHERE NOT EXISTS (SELECT 1 FROM sys_user WHERE username = 'admin');
 
 -- ------------------------------------------------------------

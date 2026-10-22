@@ -15,13 +15,14 @@ export async function loginApi(username, password) {
     if (response.status === 502 || response.status === 504) {
       throw new Error('网关错误(502/504)：Java 后端未响应，请在服务器检查 emr-backend 是否启动');
     }
+    // 修复：原实现把 new Error(...) 写在 try 内部，会被自己的 catch 捕获，
+    // 导致即便服务器返回了合法 JSON（含 message）也永远走 fallback，
+    // 用户看到「登录失败 HTTP 400，服务器未返回 JSON」这种误导性提示。
+    let errJson = null;
     try {
-      const errJson = JSON.parse(text);
-      throw new Error(errJson.message || `登录失败 HTTP ${response.status}`);
-    } catch (e) {
-      if (e.message && e.message.includes('网关')) throw e;
-      throw new Error(`登录失败 HTTP ${response.status}，服务器未返回 JSON`);
-    }
+      errJson = JSON.parse(text);
+    } catch { /* 非 JSON 响应，交给下面统一处理 */ }
+    throw new Error(errJson?.message || `登录失败 HTTP ${response.status}，服务器未返回可用JSON`);
   }
   try {
     return JSON.parse(text);

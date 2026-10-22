@@ -51,7 +51,6 @@ spring:
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
   global-config:
     db-config:
       logic-delete-field: deleted
@@ -66,6 +65,7 @@ jwt:
 
 # File upload config
 file:
+  storage-type: ${FILE_STORAGE_TYPE:local}
   upload-path: ./uploads/
   max-size: 52428800
 

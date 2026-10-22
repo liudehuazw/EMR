@@ -87,7 +87,8 @@ export const useAuthStore = defineStore('auth', () => {
       return { success: true };
     } catch (err) {
       console.error('[Auth] Login failed:', err);
-      return { error: '登录失败，请重试' };
+      // 保留后端/网络给出的真实原因，否则「密码错误」会被笼统覆盖成「请重试」
+      return { error: err?.message || '登录失败，请重试' };
     } finally {
       loading.value = false;
     }

@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Lab Report service layer
@@ -53,6 +54,16 @@ public class LabReportService extends ServiceImpl<LabReportMapper, LabReport> {
             cacheService.set(cacheKey, count, 300L);
         }
         return count;
+    }
+
+    /**
+     * 批量统计多个患者的检验报告数（一次 GROUP BY 查询，避免 N+1）。
+     */
+    public List<Map<String, Object>> countByPatientIds(List<Long> patientIds) {
+        if (patientIds == null || patientIds.isEmpty()) {
+            return List.of();
+        }
+        return baseMapper.countByPatientIds(patientIds);
     }
 
     @Transactional

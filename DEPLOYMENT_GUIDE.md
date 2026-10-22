@@ -117,6 +117,8 @@ mysql -u root -p < /opt/Electronic-medical-record/database/init.sql
 # 均为幂等脚本，可重复执行
 mysql -u root -p emr_db < /opt/Electronic-medical-record/database/V5__system_and_ai_config.sql
 mysql -u root -p emr_db < /opt/Electronic-medical-record/database/V6__fix_missing_columns.sql
+mysql -u root -p emr_db < /opt/Electronic-medical-record/database/V7__perf_indexes.sql
+mysql -u root -p emr_db < /opt/Electronic-medical-record/database/V8__invoice_payment_breakdown.sql
 ```
 
 ### 3.3 （可选）创建专用数据库账号
@@ -135,8 +137,47 @@ FLUSH PRIVILEGES;
 
 | 用户名 | 密码 | 说明 |
 |--------|------|------|
-| `admin` | `admin` | 系统管理员，数据持久保存 |
+| `admin` | **需自行生成** | 系统管理员，数据持久保存 |
 | `user` | `user` | 演示账户，纯前端模式，数据不落库，刷新即清空 |
+
+> ⚠️ 出于安全考虑，`database/init.sql` 与 `data-h2.sql` **不预置任何可用密码哈希**。
+> `admin` 的密码是占位符 `<首次部署后由你生成的BCrypt哈希>`，**未设置前该账户无法登录**。
+> 全新部署后用下面的命令生成哈希并写入数据库。
+
+**第一步：生成 BCrypt 哈希（cost=10）**
+
+方式一：Python（推荐，无需 Java）
+
+```bash
+pip3 install bcrypt
+python3 -c "import bcrypt; print(bcrypt.hashpw(b'你的新密码', bcrypt.gensalt(10)).decode())"
+```
+
+方式二：JDK 11+ `jshell`（复用 Maven 已下载的 spring-security-crypto）
+
+```bash
+jshell --class-path "$(find ~/.m2 -name 'spring-security-crypto-*.jar' | head -1)" -q <<'EOF'
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+System.out.println(new BCryptPasswordEncoder().encode("你的新密码"));
+/exit
+EOF
+```
+
+**第二步：写入数据库**
+
+```sql
+UPDATE sys_user SET password='<上一步输出的哈希>' WHERE username='admin';
+```
+
+**第三步：验证登录**
+
+```bash
+curl -s -X POST http://localhost:8080/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"你的新密码"}'
+```
+
+返回 `"code":200` 即为成功。
 
 > ⚠️ 部署后请立即修改 admin 密码。密码必须存 BCrypt 哈希：
 
@@ -486,6 +527,44 @@ echo "--- OOM  ---";    dmesg | grep -i "oom\|killed" | tail -3 || echo "无"
 
 ## 十一、常见问题排查
 
+### 点击登录一直转圈、刷新也无用（jar 被覆盖但进程未重启）⚠️ 高危
+
+**症状**：部署后端后网页登录无限卡住、前端一直转圈；`/api/health`、`/api/auth/logout` 却正常返回；`/api/auth/login`、未知路径（404）、`/api/error` **全部 0 字节挂死**（既不是 502 也不报错）。
+
+**根因**：JVM 惰性加载类。`mvn package` **在旧进程仍运行时原地覆盖了 jar**，导致：
+
+- 已加载过的类（health / logout）→ 内存里还有，正常 ✅
+- 未加载过的类（登录、错误分发用到的 `ThrowableProxy`）→ 按新偏移去 jar 里读，读到错位字节 → 抛 `NoClassDefFoundError` / `ClassNotFoundException` ❌
+- 该异常发生在 **Tomcat 写响应阶段**，请求线程带未捕获 `Error` 直接死亡 → 客户端收不到任何字节 → 永久挂起
+
+**确诊（一条命令）**：
+
+```bash
+PID=$(systemctl show -p MainPID --value emr-backend)
+echo "进程启动: $(ps -o lstart= -p $PID)"
+echo "jar 时间: $(stat -c '%y' /opt/emr/backend/target/*.jar)"
+journalctl -u emr-backend -n 300 --no-pager | grep -E 'NoClassDefFoundError|ClassNotFoundException'
+```
+
+**只要「进程启动时间早于 jar 时间」，就是本故障。**
+
+**修复**：
+
+```bash
+sudo systemctl restart emr-backend
+# 等冷启动 ~60s 后验证（必须秒回，不能挂起）
+curl -s -m 15 -X POST -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"x"}' http://127.0.0.1:8080/api/auth/login
+```
+
+**预防**：`scripts/deploy-config.ps1` 已修正为 **先 `systemctl stop` → 再 `mvn package` → 再 `start`**，并在部署末尾自动校验「进程启动时间 > jar 时间」，不满足直接报错退出。一次性诊断可跑：
+
+```bash
+bash scripts/diagnose-emr-backend.sh
+```
+
+---
+
 ### 刷新后病历/检验/发票“消失”（库里有数据）
 
 多为 **前端用空 API 结果覆盖 localStorage**，或 **患者列表被 `user_id` 过滤为空**（无痕窗口无本地缓存时更明显）。
@@ -611,6 +690,8 @@ Electronic-medical-record/
 ├── database/
 │   ├── init.sql                         # 全新部署（已自包含全部表与字段）
 │   ├── V5__fix_missing_columns.sql      # 旧库升级（幂等）
+│   ├── V7__perf_indexes.sql             # 性能索引（幂等）
+│   ├── V8__invoice_payment_breakdown.sql # 发票支付构成字段（幂等）
 │   └── V2/V3/V4                         # 历史增量脚本
 ├── docs/                                # 需求文档
 ├── docker-compose.yml / .env.example    # 容器化一键部署

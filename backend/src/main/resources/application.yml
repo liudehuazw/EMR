@@ -43,7 +43,6 @@ cache:
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
   global-config:
     db-config:
       logic-delete-field: deleted
@@ -58,9 +57,9 @@ jwt:
 
 # 文件上传配置
 file:
+  storage-type: ${FILE_STORAGE_TYPE:local}
   upload-path: ./uploads/
   max-size: 52428800 # 50MB
-  storage-type: ${FILE_STORAGE_TYPE:local}
 
 # OCR服务配置
 ocr:

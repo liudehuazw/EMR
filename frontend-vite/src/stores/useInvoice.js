@@ -51,6 +51,14 @@ export const useInvoiceStore = defineStore('invoice', () => {
         totalAmount: invoice.totalAmount || 0,
         selfPayAmount: invoice.selfPayAmount || '',
         insuranceAmount: invoice.insuranceAmount || '',
+        // 支付构成明细（医保票据）
+        otherPayment: invoice.otherPayment ?? null,
+        accountPayment: invoice.accountPayment ?? null,
+        criticalIllnessAmount: invoice.criticalIllnessAmount ?? null,
+        otherInsuranceAmount: invoice.otherInsuranceAmount ?? null,
+        medicalAssistanceAmount: invoice.medicalAssistanceAmount ?? null,
+        personalSelfPay: invoice.personalSelfPay ?? null,
+        personalSelfExpense: invoice.personalSelfExpense ?? null,
         commercialReimbursed: invoice.commercialReimbursed ? 1 : 0,
         commercialAmount: invoice.commercialReimbursed
           ? (invoice.commercialAmount || 0)
@@ -100,6 +108,14 @@ export const useInvoiceStore = defineStore('invoice', () => {
                 ocrRawText: r.ocrRawText || r.ocr_raw_text || '',
                 commercialReimbursed: !!(r.commercialReimbursed === 1 || r.commercialReimbursed === true),
                 commercialAmount: r.commercialAmount != null ? String(r.commercialAmount) : '',
+                // 支付构成明细（医保票据）—— 统一转字符串，便于展示
+                otherPayment: r.otherPayment != null ? String(r.otherPayment) : '',
+                accountPayment: r.accountPayment != null ? String(r.accountPayment) : '',
+                criticalIllnessAmount: r.criticalIllnessAmount != null ? String(r.criticalIllnessAmount) : '',
+                otherInsuranceAmount: r.otherInsuranceAmount != null ? String(r.otherInsuranceAmount) : '',
+                medicalAssistanceAmount: r.medicalAssistanceAmount != null ? String(r.medicalAssistanceAmount) : '',
+                personalSelfPay: r.personalSelfPay != null ? String(r.personalSelfPay) : '',
+                personalSelfExpense: r.personalSelfExpense != null ? String(r.personalSelfExpense) : '',
                 items: parseJsonField(r.items, []) || []
               }))
             };

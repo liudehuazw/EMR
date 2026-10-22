@@ -43,6 +43,34 @@ public class Invoice {
     @TableField("insurance_amount")
     private BigDecimal insuranceAmount;
 
+    /** 其他支付（含大病保险等），医保票据支付构成之一 */
+    @TableField("other_payment")
+    private BigDecimal otherPayment;
+
+    /** 个人账户支付 */
+    @TableField("account_payment")
+    private BigDecimal accountPayment;
+
+    /** 大病保险支付（样本中与 otherPayment 恒等，属明细拆分，仅作展示） */
+    @TableField("critical_illness_amount")
+    private BigDecimal criticalIllnessAmount;
+
+    /** 个人自付 */
+    @TableField("personal_self_pay")
+    private BigDecimal personalSelfPay;
+
+    /** 个人自费 */
+    @TableField("personal_self_expense")
+    private BigDecimal personalSelfExpense;
+
+    /** 其他保险支付（「其他支付」的分项） */
+    @TableField("other_insurance_amount")
+    private BigDecimal otherInsuranceAmount;
+
+    /** 医疗救助支付（「其他支付」的分项） */
+    @TableField("medical_assistance_amount")
+    private BigDecimal medicalAssistanceAmount;
+
     /** Whether reimbursed by commercial insurance (0/1) */
     @TableField("commercial_reimbursed")
     private Integer commercialReimbursed;

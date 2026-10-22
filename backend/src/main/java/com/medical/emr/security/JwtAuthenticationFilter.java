@@ -33,20 +33,27 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         String jwtToken = resolveToken(request);
         String username = null;
+        Long userId = null;
 
         if (jwtToken != null) {
+            // 单次解析，同时取 subject 与 userId；解析失败不影响后续未认证流程
             try {
-                username = jwtUtil.getUsernameFromToken(jwtToken);
+                io.jsonwebtoken.Claims claims = jwtUtil.parseClaims(jwtToken);
+                username = claims.getSubject();
+                userId = JwtUtil.extractUserId(claims);
             } catch (Exception e) {
-                logger.error("无法获取JWT Token中的用户名", e);
+                logger.warn("JWT 解析失败: {}", e.getMessage());
             }
         }
 
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            // UserService.loadUserByUsername 走 Redis 缓存（命中时不再查库）
             UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
             if (jwtUtil.validateToken(jwtToken, userDetails.getUsername())) {
+                // 携带 userId，后续 Controller 无需再查用户表
+                UserPrincipal principal = new UserPrincipal(userId, userDetails);
                 UsernamePasswordAuthenticationToken authToken =
-                        new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+                        new UsernamePasswordAuthenticationToken(principal, null, userDetails.getAuthorities());
                 authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authToken);
             }

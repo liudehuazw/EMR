@@ -20,6 +20,17 @@ public interface InvoiceMapper extends BaseMapper<Invoice> {
     @Select("SELECT COUNT(*) FROM emr_invoice WHERE patient_id = #{patientId} AND deleted = 0")
     Long countByPatientId(@Param("patientId") Long patientId);
 
+    /**
+     * 批量统计：一次查询返回多个患者的发票数（避免 N+1）。返回列：patientId, cnt
+     */
+    @Select("<script>"
+            + "SELECT patient_id AS patientId, COUNT(*) AS cnt FROM emr_invoice "
+            + "WHERE deleted = 0 AND patient_id IN "
+            + "<foreach collection='patientIds' item='id' open='(' separator=',' close=')'>#{id}</foreach> "
+            + "GROUP BY patient_id"
+            + "</script>")
+    List<Map<String, Object>> countByPatientIds(@Param("patientIds") List<Long> patientIds);
+
     @Select("SELECT SUM(total_amount) FROM emr_invoice WHERE patient_id = #{patientId} AND deleted = 0")
     BigDecimal sumTotalAmountByPatientId(@Param("patientId") Long patientId);
 

@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Imaging Report service layer
@@ -53,6 +54,16 @@ public class ImagingReportService extends ServiceImpl<ImagingReportMapper, Imagi
         if (cacheService != null) {
             cacheService.deleteByPattern(CACHE_PREFIX + ":*");
         }
+    }
+
+    /**
+     * 批量统计多个患者的影像报告数（一次 GROUP BY 查询，避免 N+1）。
+     */
+    public List<Map<String, Object>> countByPatientIds(List<Long> patientIds) {
+        if (patientIds == null || patientIds.isEmpty()) {
+            return List.of();
+        }
+        return baseMapper.countByPatientIds(patientIds);
     }
 
     public boolean save(ImagingReport report) {

@@ -20,6 +20,18 @@ public interface MedicalRecordMapper extends BaseMapper<MedicalRecord> {
     Long countByPatientId(@Param("patientId") Long patientId);
 
     /**
+     * 批量统计：一次查询返回多个患者的病历数，避免前端按患者逐个请求（N+1）。
+     * 返回列：patientId, cnt
+     */
+    @Select("<script>"
+            + "SELECT patient_id AS patientId, COUNT(*) AS cnt FROM emr_medical_record "
+            + "WHERE deleted = 0 AND patient_id IN "
+            + "<foreach collection='patientIds' item='id' open='(' separator=',' close=')'>#{id}</foreach> "
+            + "GROUP BY patient_id"
+            + "</script>")
+    List<Map<String, Object>> countByPatientIds(@Param("patientIds") List<Long> patientIds);
+
+    /**
      * Medical records within a date range
      */
     @Select("SELECT visit_date AS visitDate, hospital AS hospital, "

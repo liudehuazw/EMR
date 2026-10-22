@@ -105,7 +105,7 @@
 - 👤 **患者档案** — 增删改查、头像裁剪
 - 📊 **病历统计** — 按就诊日期管理，OCR 辅助提取日期
 - 🔬 **检验 / 影像** — 上传 PDF/图片，OCR 结构化；OCR 原文可编辑
-- 💰 **发票统计** — 商保报销勾选与汇总
+- 💰 **发票统计** — 按医保票据支付构成拆分展示（统筹 / 其他支付 / 个人账户 / 现金），自动校验合计与总额；商保报销勾选与汇总
 - 💬 **AI 报告解读** — 按**用户**配置的模型
 - 🤖 **AI 就诊助手** — SSE 流式；工具白名单查库，**按用户隔离**
 - ⚙️ **系统设置** — admin 切换全站存储；每用户 AI 模型与在线测试
@@ -122,7 +122,7 @@ docker compose --profile ocr up -d   # 需要 OCR 时
 ```
 
 - **默认本地存储**，无需任何云服务即可跑通**上传**；OCR 需启用 `ocr` profile；AI 需在系统设置中配置。
-- 访问：**http://localhost:8088**（`admin` / `admin`）
+- 访问：**http://localhost:8088**（`admin`，密码首次部署后自行生成并写入，见 [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) §3.4）
 
 详情与排障：[DEPLOY.md](DEPLOY.md)
 
@@ -134,7 +134,7 @@ docker compose --profile ocr up -d   # 需要 OCR 时
 
 ## 本地开发（摘要）
 
-- **零 MySQL**：`cd backend && .\run-dev.ps1 -Profile dev`（H2，默认 `admin` / `admin`）
+- **零 MySQL**：`cd backend && .\run-dev.ps1 -Profile dev`（H2；`admin` 密码首次启动后自行生成并写入，见 [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) §3.4）
 - **MySQL**：`mysql -u root -p < database/init.sql`，复制 `backend/local.env.example` → `local.env`
 - **前端**：`cd frontend-vite && npm install && npm run dev` → http://localhost:5173
 
@@ -166,7 +166,6 @@ EMR/
 - **近期**：默认 local、文档与代码对齐、Docker 零配置试用
 - **计划**：独立 `data.encryption.key`、上传扩展名白名单、MinIO 存储适配
 - 欢迎 Issue / PR（MIT）
-
 ---
 
 ## 环境变量（摘要）
@@ -194,6 +193,10 @@ mysql -u root -p emr_db < database/V5__system_and_ai_config.sql
 mysql -u root -p emr_db < database/V6__fix_missing_columns.sql
 # 若升级前存在 patient.user_id 为 NULL 的旧数据（列表为空/无痕登录无患者）：
 mysql -u root -p emr_db < database/V6__backfill_patient_user_id.sql
+# 性能索引（可重复执行）
+mysql -u root -p emr_db < database/V7__perf_indexes.sql
+# 发票支付构成明细字段（其他支付 / 个人账户支付 / 大病保险 / 个人自付 / 个人自费）
+mysql -u root -p emr_db < database/V8__invoice_payment_breakdown.sql
 ```
 
 全新部署只需 `database/init.sql`。

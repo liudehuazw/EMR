@@ -20,6 +20,17 @@ public interface LabReportMapper extends BaseMapper<LabReport> {
     Long countByPatientId(@Param("patientId") Long patientId);
 
     /**
+     * 批量统计：一次查询返回多个患者的检验报告数（避免 N+1）。返回列：patientId, cnt
+     */
+    @Select("<script>"
+            + "SELECT patient_id AS patientId, COUNT(*) AS cnt FROM emr_lab_report "
+            + "WHERE deleted = 0 AND patient_id IN "
+            + "<foreach collection='patientIds' item='id' open='(' separator=',' close=')'>#{id}</foreach> "
+            + "GROUP BY patient_id"
+            + "</script>")
+    List<Map<String, Object>> countByPatientIds(@Param("patientIds") List<Long> patientIds);
+
+    /**
      * Lab reports within a date range, with abnormal item count per report
      */
     @Select("SELECT r.id AS id, r.report_date AS reportDate, r.test_name AS testName, "

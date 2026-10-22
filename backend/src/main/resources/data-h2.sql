@@ -5,10 +5,13 @@
 --  使用 WHERE NOT EXISTS 保证脚本可重复执行（即使换成文件版 H2 也不会报重复键）。
 -- ============================================================
 
--- 默认管理员账户 admin / admin
--- 哈希为 BCrypt(cost=10) 生成，与 database/init.sql 保持一致
+-- 默认管理员账户 admin
+-- ⚠️ 出于安全考虑，这里不预置任何可用的密码哈希。
+-- dev 模式首启后 admin 无法直接登录，请按 README「默认账户」生成 BCrypt 哈希后写入：
+--   UPDATE sys_user SET password='<生成的BCrypt哈希>' WHERE username='admin';
+-- 哈希生成方式见 backend/local.env.example 顶部注释或 DEPLOYMENT_GUIDE.md 3.4 节。
 INSERT INTO sys_user (username, password, real_name, status)
-SELECT 'admin', '$2a$10$qc0XWDusfUWHehalERruPusWQ19UbahC5G0qKsbjSSdFfhpV507T2', '系统管理员', 1
+SELECT 'admin', '<首次启动后由你生成的BCrypt哈希>', '系统管理员', 1
 WHERE NOT EXISTS (SELECT 1 FROM sys_user WHERE username = 'admin');
 
 -- 演示患者（便于首次启动即可看到列表 / 测试各模块）

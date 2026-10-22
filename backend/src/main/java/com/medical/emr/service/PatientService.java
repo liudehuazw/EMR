@@ -29,8 +29,18 @@ public class PatientService extends ServiceImpl<PatientMapper, Patient> {
     @Autowired(required = false)
     private CacheService cacheService;
 
+    /**
+     * Paginated query with optional keyword search and gender filter
+     * @param page current page number (1-based)
+     * @param size page size
+     * @param keyword search keyword (name or phone)
+     * @param gender gender filter (1=male, 2=female, null=all)
+     * @param userId user ID for data isolation
+     * @return paginated patient list
+     */
     public IPage<Patient> getPatientPage(int page, int size, String keyword, Integer gender, Long userId) {
         String cacheKey = CACHE_PATIENTS + ":" + page + ":" + size + ":" + (keyword != null ? keyword : "") + ":" + (gender != null ? gender : "") + ":" + userId;
+        // 尝试从缓存读取
         if (cacheService != null) {
             @SuppressWarnings("unchecked")
             IPage<Patient> cached = (IPage<Patient>) cacheService.get(cacheKey);
@@ -38,9 +48,11 @@ public class PatientService extends ServiceImpl<PatientMapper, Patient> {
                 return cached;
             }
         }
+        // 缓存未命中，查数据库
         LambdaQueryWrapper<Patient> wrapper = new LambdaQueryWrapper<>();
         applyUserScopeToQuery(wrapper, userId);
 
+        // Keyword search: match name or phone
         if (StringUtils.hasText(keyword)) {
             wrapper.and(w -> w
                     .like(Patient::getName, keyword)
@@ -49,37 +61,55 @@ public class PatientService extends ServiceImpl<PatientMapper, Patient> {
             );
         }
 
+        // Gender filter
         if (gender != null) {
             wrapper.eq(Patient::getGender, gender);
         }
 
+        // Order by create_time descending (newest first)
         wrapper.orderByDesc(Patient::getCreateTime);
 
         IPage<Patient> result = page(new Page<>(page, size), wrapper);
         claimOrphanPatientsForAdmin(result.getRecords(), userId);
+        // 写入缓存（5分钟过期）
         if (cacheService != null) {
             cacheService.set(cacheKey, result, 300L);
         }
         return result;
     }
 
+    /**
+     * Create a new patient with auto-generated patient number
+     * @param form patient form data
+     * @param userId user ID for data isolation
+     * @return created patient entity
+     */
     public Patient createPatient(PatientForm form, Long userId) {
         Patient patient = new Patient();
         copyFormToEntity(form, patient);
         patient.setPatientNo(generatePatientNo());
         patient.setUserId(userId);
         save(patient);
+        // 清除患者列表缓存
         if (cacheService != null) {
             cacheService.deleteByPattern(CACHE_PATIENTS + ":*");
         }
         return patient;
     }
 
+    /**
+     * Update an existing patient
+     * @param id patient id
+     * @param form patient form data
+     * @param userId user ID for data isolation
+     * @return updated patient entity, or null if not found
+     */
     public Patient updatePatient(Long id, PatientForm form, Long userId) {
         Patient patient = getById(id);
         if (patient == null) {
             return null;
         }
+        // 【安全修复】用户数据隔离：只能修改自己的患者数据
         if (!canAccessPatient(patient, userId)) {
             return null;
         }
@@ -88,6 +118,7 @@ public class PatientService extends ServiceImpl<PatientMapper, Patient> {
         }
         copyFormToEntity(form, patient);
         updateById(patient);
+        // 清除患者相关缓存
         if (cacheService != null) {
             cacheService.deleteByPattern(CACHE_PATIENTS + ":*");
             cacheService.delete(CACHE_PATIENT + ":" + id);
@@ -95,7 +126,14 @@ public class PatientService extends ServiceImpl<PatientMapper, Patient> {
         return patient;
     }
 
+    /**
+     * Get patient by ID with user isolation
+     * @param id patient id
+     * @param userId user ID for data isolation
+     * @return patient entity, or null if not found
+     */
     public Patient getPatientById(Long id, Long userId) {
+        // 尝试从缓存读取
         String cacheKey = CACHE_PATIENT + ":" + id;
         if (cacheService != null) {
             Patient cached = cacheService.get(cacheKey);
@@ -103,25 +141,35 @@ public class PatientService extends ServiceImpl<PatientMapper, Patient> {
                 return cached;
             }
         }
+        // 缓存未命中，查数据库
         Patient patient = getById(id);
         if (patient == null) {
             return null;
         }
+        // 【安全修复】用户数据隔离：只能查看自己的患者数据
         if (!canAccessPatient(patient, userId)) {
             return null;
         }
+        // 写入缓存（5分钟过期）
         if (cacheService != null) {
             cacheService.set(cacheKey, patient, 300L);
         }
         return patient;
     }
 
+    /**
+     * Delete patient by ID (with cache eviction)
+     * @param id patient id
+     * @param userId current user ID
+     * @return true if deleted
+     */
     public boolean deletePatient(Long id, Long userId) {
         Patient patient = getPatientById(id, userId);
         if (patient == null) {
             return false;
         }
         boolean deleted = removeById(id);
+        // 清除患者相关缓存
         if (deleted && cacheService != null) {
             cacheService.deleteByPattern(CACHE_PATIENTS + ":*");
             cacheService.delete(CACHE_PATIENT + ":" + id);
@@ -129,6 +177,10 @@ public class PatientService extends ServiceImpl<PatientMapper, Patient> {
         return deleted;
     }
 
+    /**
+     * Auto-generate patient number in format P000001, P000002, ...
+     * @return next available patient number
+     */
     private String generatePatientNo() {
         String maxNo = baseMapper.selectMaxPatientNo();
         if (maxNo == null || maxNo.isEmpty()) {
@@ -167,23 +219,34 @@ public class PatientService extends ServiceImpl<PatientMapper, Patient> {
         return SecurityUtils.isAdmin();
     }
 
+    /** 历史数据 user_id 为空时，admin 首次拉列表自动归属到当前 admin 账号 */
     private void claimOrphanPatientsForAdmin(java.util.List<Patient> records, Long userId) {
         if (userId == null || !SecurityUtils.isAdmin() || records == null || records.isEmpty()) {
             return;
         }
-        boolean changed = false;
+        // 批量 UPDATE，避免分页查询路径里逐条写库
+        java.util.List<Long> orphanIds = new java.util.ArrayList<>();
         for (Patient p : records) {
             if (p.getUserId() == null) {
                 p.setUserId(userId);
-                updateById(p);
-                changed = true;
+                orphanIds.add(p.getId());
             }
         }
-        if (changed && cacheService != null) {
+        if (orphanIds.isEmpty()) {
+            return;
+        }
+        lambdaUpdate()
+                .set(Patient::getUserId, userId)
+                .in(Patient::getId, orphanIds)
+                .update();
+        if (cacheService != null) {
             cacheService.deleteByPattern(CACHE_PATIENTS + ":*");
         }
     }
 
+    /**
+     * Copy form fields to entity
+     */
     private void copyFormToEntity(PatientForm form, Patient patient) {
         patient.setName(form.getName());
         patient.setGender(form.getGender());
@@ -196,10 +259,12 @@ public class PatientService extends ServiceImpl<PatientMapper, Patient> {
         patient.setMedicalHistory(form.getMedicalHistory());
         patient.setAvatarUrl(form.getAvatarUrl());
 
+        // Parse birth date string to LocalDate
         if (StringUtils.hasText(form.getBirthDate())) {
             try {
                 patient.setBirthDate(LocalDate.parse(form.getBirthDate(), DATE_FORMATTER));
             } catch (Exception e) {
+                // Log warning but don't fail - birthDate is optional
                 patient.setBirthDate(null);
             }
         } else {

@@ -29,8 +29,10 @@ public class AuthController {
     public ResponseEntity<ApiResponse<LoginResponse>> login(@Valid @RequestBody LoginRequest loginRequest) {
         try {
             if (!userService.authenticate(loginRequest.getUsername(), loginRequest.getPassword())) {
+                // 业务码与 HTTP 状态保持一致（400）：前端在 HTTP 非 2xx 时读 body.message 展示，
+                // 若此处沿用 ApiResponse.error(String) 的默认值 500，会与 HTTP 400 自相矛盾。
                 return ResponseEntity.badRequest()
-                        .body(ApiResponse.error("用户名或密码错误"));
+                        .body(ApiResponse.error(400, "用户名或密码错误"));
             }
             
             User user = userService.findByUsername(loginRequest.getUsername());
@@ -73,7 +75,7 @@ public class AuthController {
             boolean success = userService.changePassword(username, request.getOldPassword(), request.getNewPassword());
             if (!success) {
                 return ResponseEntity.badRequest()
-                        .body(ApiResponse.error("原密码错误"));
+                        .body(ApiResponse.error(400, "原密码错误"));
             }
             return ResponseEntity.ok(ApiResponse.success("密码修改成功"));
         } catch (Exception e) {

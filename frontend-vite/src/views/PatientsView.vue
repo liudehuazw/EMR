@@ -128,7 +128,7 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue';
+import { ref, reactive, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { usePatientsStore } from '@/stores/usePatients';
 import { uploadFileToCloud } from '@/api/files';
@@ -139,8 +139,11 @@ import { useInvoiceStore } from '@/stores/useInvoice';
 import { useRecordsStore } from '@/stores/useRecords';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { backendSyncVisible } from '@/utils/syncFromBackend';
+import { usePatientCounts } from '@/composables/usePatientCounts';
+import { useAuthStore } from '@/stores/useAuth';
 
 const router = useRouter();
+const authStore = useAuthStore();
 const patientsStore = usePatientsStore();
 const labStore = useLabStore();
 const imagingStore = useImagingStore();
@@ -178,13 +181,20 @@ const maskPhone = (phone) => {
   return phone.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2');
 };
 
-const getCount = (type, patientId) => {
+const patientList = computed(() => patientsStore.patients);
+
+/** 兜底：接口不可用时退回本地 store 计数（与改造前行为一致） */
+const localCount = (type, patientId) => {
   if (type === 'records') return recordsStore.getPatientRecords(patientId).length;
   if (type === 'lab') return labStore.getPatientReports(patientId).length;
   if (type === 'imaging') return imagingStore.getPatientReports(patientId).length;
   if (type === 'invoice') return invoiceStore.getPatientInvoices(patientId).length;
   return 0;
 };
+
+// 卡片数字：优先用后端聚合统计（一次请求、带缓存秒出），本地 store 仅作兜底
+const { getCount: getRemoteCount } = usePatientCounts(patientList, authStore.isDemoMode);
+const getCount = (type, patientId) => getRemoteCount(type, patientId, () => localCount(type, patientId));
 
 const triggerAvatarUpload = (patient) => {
   const input = document.createElement('input');

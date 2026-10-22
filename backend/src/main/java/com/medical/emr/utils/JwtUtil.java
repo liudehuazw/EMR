@@ -49,10 +49,46 @@ public class JwtUtil {
     public String getUsernameFromToken(String token) {
         return getClaimFromToken(token, Claims::getSubject);
     }
-    
+
     public Long getUserIdFromToken(String token) {
         Claims claims = getAllClaimsFromToken(token);
-        return claims.get("userId", Long.class);
+        Object v = claims.get("userId");
+        if (v == null) {
+            return null;
+        }
+        if (v instanceof Number n) {
+            return n.longValue();
+        }
+        try {
+            return Long.valueOf(v.toString());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /**
+     * 一次解析出 Claims，供过滤器同时取 subject 与 userId，避免重复验签。
+     */
+    public Claims parseClaims(String token) {
+        return getAllClaimsFromToken(token);
+    }
+
+    public static Long extractUserId(Claims claims) {
+        if (claims == null) {
+            return null;
+        }
+        Object v = claims.get("userId");
+        if (v == null) {
+            return null;
+        }
+        if (v instanceof Number n) {
+            return n.longValue();
+        }
+        try {
+            return Long.valueOf(v.toString());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
     
     public Date getExpirationDateFromToken(String token) {

@@ -1,8 +1,16 @@
 #!/bin/bash
 # 宝塔站点：确保 /api/ 优先于 *.pdf 等静态正则，避免本地预览 404
-CONF="${1:-/www/server/panel/vhost/nginx/emr.liudehuazw.cn.conf}"
-if [ ! -f "$CONF" ]; then
-  echo "Config not found: $CONF"
+#
+# 用法：
+#   ./patch-nginx-api-priority.sh [站点配置文件路径]
+# 不传参时自动查找宝塔 vhost 目录下的第一个 .conf
+if [ -n "$1" ]; then
+  CONF="$1"
+else
+  CONF=$(ls /www/server/panel/vhost/nginx/*.conf 2>/dev/null | head -1)
+fi
+if [ -z "$CONF" ] || [ ! -f "$CONF" ]; then
+  echo "Config not found. 用法: $0 [站点conf路径]"
   exit 1
 fi
 if grep -q 'location \^~ /api/' "$CONF"; then

@@ -41,7 +41,7 @@ docker compose --profile ocr up -d
 http://localhost:8088
 ```
 
-默认账号：`admin` / `admin`（演示账号 `user` / `user`，数据不落库）
+默认账号：`admin`（密码需首次部署后自行生成并写入，见 `DEPLOYMENT_GUIDE.md` §3.4），演示账号 `user` / `user`（数据不落库）
 
 > ⚠️ 首次启动时 `database/init.sql` 会自动建库建表。
 > **只有 mysql 数据卷为空时才会执行**，之后修改 init.sql 不会自动生效。
@@ -165,6 +165,7 @@ docker build -t emr-ocr ./backend/ocr-service
 | 容器反复重启 | `docker compose logs <服务>`；OCR 常见于内存不足，需给宿主机加内存或 swap |
 | 改了 `init.sql` 但没生效 | 初始化只在 mysql 数据卷为空时执行，需 `docker compose down -v` 重建（会清空数据）或手动执行迁移脚本 |
 | 刷新后数据不见 | 多为 API 返回空列表；执行 `V6__backfill_patient_user_id.sql`；确保前端含 `backendSync.js` 安全合并逻辑 |
+| 患者列表统计慢 | 升级后端至含 `/api/patient-summary/counts` 的版本，并执行 `V7__perf_indexes.sql` |
 | PDF 预览失败 | 容器内 Nginx 已用 `^~ /api/`；自建反代勿用 `*.pdf` 静态规则覆盖 `/api/files/preview/` |
 | 端口冲突 | 修改 `docker-compose.yml` 中 `ports` 左侧端口 |
 

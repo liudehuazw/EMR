@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Invoice service layer
@@ -67,6 +68,16 @@ public class InvoiceService extends ServiceImpl<InvoiceMapper, Invoice> {
         if (cacheService != null) {
             cacheService.deleteByPattern(CACHE_PREFIX + ":*");
         }
+    }
+
+    /**
+     * 批量统计多个患者的发票数（一次 GROUP BY 查询，避免 N+1）。
+     */
+    public List<Map<String, Object>> countByPatientIds(List<Long> patientIds) {
+        if (patientIds == null || patientIds.isEmpty()) {
+            return List.of();
+        }
+        return baseMapper.countByPatientIds(patientIds);
     }
 
     public boolean save(Invoice invoice) {

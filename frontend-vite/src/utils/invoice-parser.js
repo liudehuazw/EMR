@@ -1,6 +1,245 @@
 /** Invoice OCR parsing utilities */
 
+/**
+ * 医保/医疗收费票据的支付构成解析。
+ *
+ * 背景（基于 7 张真实票据样本归纳）：
+ *   一张医保票据的支付构成通常为
+ *     总金额 = 医保统筹基金支付 + 其他支付 + 个人账户支付 + 个人现金支付
+ *   例如：174.66 + 0.00 + 52.84 + 685.63 = 913.13  ✓
+ *
+ * 旧实现只抓「医保统筹基金支付」和「现金支付/个人自付」两个字段，
+ * 导致 自付 + 医保 < 总额（差额正是被漏掉的「其他支付」「个人账户支付」），
+ * 且「大病保险支付」完全未提取。
+ *
+ * 关键事实：样本中「大病保险支付」与「其他支付」恒等
+ *   （9.65/9.65、34.75/34.75、739.84/739.84），
+ *   即大病保险是"其他支付"的明细拆分，**不可再与总额相加**，仅作展示。
+ */
+
+/** 各类金额的标签（按优先级）。OCR 可能输出「标签 金额」同行，或标签与数值分行 */
+const MEDICAL_AMOUNT_LABELS = {
+  total:          [/金额合计/, /合计\s*[（(]\s*小写/, /^合计$/, /^总计$/],
+  insurance:      [/医保统筹基金支付/, /统筹基金支付/, /医保支付金额/],
+  other:          [/其他支付/],
+  account:        [/个人账户支付/],
+  cash:           [/个人现金支付/, /现金支付/],
+  critical:       [/大病保险支付/, /大病保险/, /大病医疗/, /门诊特病/, /特殊病种/, /特病保险/],
+  // 「其他支付」的分项（江苏票据结构：大病保险支付 + 其他保险支付 + 医疗救助支付）
+  otherInsurance:   [/其他保险支付/],
+  medicalAssistance: [/医疗救助支付/, /医疗救助/],
+  selfPay:        [/个人自付/],
+  selfExpense:    [/个人自费/],
+  // 注意：「个人自付」必须在「个人自负」之前匹配，二者仅一字之差
+  extraFund:      [/附加基金支付/],
+  classification: [/分类自负/],
+  personalBurden: [/个人自负/]
+};
+
+/** 余额类字段必须排除，避免把"个人医保账户余额"误当支付金额 */
+const MEDICAL_EXCLUDE = /余额/;
+
+/** 金额提取：优先取「标签」后紧跟的数值，否则向后找若干行 */
+function pickMedicalAmount(lines, patterns, { allowZero = true } = {}) {
+  const accept = (v) => !isNaN(v) && (allowZero || v > 0);
+
+  // 第一轮：同一行内可能并存多个「标签：金额」（如 统筹：174.66 其他支付：0.00 个人账户：52.84）
+  // 必须定位到标签**紧跟**的那个数值；且要跳过「个人账户余额：0.00」这类余额字段
+  for (const line of lines) {
+    for (const p of patterns) {
+      const re = new RegExp(p.source + '\\s*[：:]?\\s*[¥￥]?\\s*([\\d,，]+\\.?\\d*)', 'g');
+      let m;
+      while ((m = re.exec(line)) !== null) {
+        // 检查该标签前若干字符是否属于「…余额」字段（如 个人账户余额）
+        const before = line.slice(Math.max(0, m.index - 8), m.index);
+        if (/余额/.test(before)) continue;
+        const v = parseFloat(m[1].replace(/[,，]/g, ''));
+        if (accept(v)) return v;
+      }
+    }
+  }
+
+  // 第二轮：标签独立成行，向后若干行找首个纯金额
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!patterns.some(p => p.test(line))) continue;
+    for (let k = i + 1; k <= i + 3 && k < lines.length; k++) {
+      const next = lines[k].trim();
+      if (/余额/.test(next)) continue;
+      if (/^\d{4}[-/年]/.test(next)) continue;      // 日期
+      const m = next.match(/^[¥￥]?\s*([\d,，]+\.\d{2})\s*$/);
+      if (m) {
+        const v = parseFloat(m[1].replace(/[,，]/g, ''));
+        if (accept(v)) return v;
+      }
+      if (/[\u4e00-\u9fa5]/.test(next)) break;       // 遇到下一个标签就停
+    }
+  }
+  return null;
+}
+
+/**
+ * 总额提取：医疗票据形如
+ *   金额合计(大写）玖佰壹拾叁元壹角叁分  (小写）913.13
+ *   金额合计（大写）壹佰壹拾壹元柒角壹分  (小写)111.71
+ * 优先取「小写」后的数值。
+ */
+function pickMedicalTotal(ocrText, lines) {
+  const t = String(ocrText || '');
+  const small = t.match(/[（(]\s*小写\s*[)）]\s*[¥￥]?\s*([\d,，]+\.?\d*)/);
+  if (small) {
+    const v = parseFloat(small[1].replace(/[,，]/g, ''));
+    if (!isNaN(v) && v > 0) return v;
+  }
+  // 兜底：金额合计所在行的最后一个金额
+  for (const line of lines) {
+    if (!/金额合计|^合计$|^总计$/.test(line)) continue;
+    const amts = [...line.matchAll(/([\d,，]+\.\d{2})/g)].map(m => parseFloat(m[1].replace(/[,，]/g, '')));
+    if (amts.length) {
+      const v = amts[amts.length - 1];
+      if (!isNaN(v) && v > 0) return v;
+    }
+  }
+  return null;
+}
+
+const fmtAmt = (v) => (v == null || isNaN(v) ? '' : Number(v).toFixed(2));
+
+/**
+ * 解析医疗收费票据（医保票据）
+ * @returns {{
+ *   totalAmount:string, selfPayAmount:string, insuranceAmount:string,
+ *   otherPayment:string, accountPayment:string, criticalIllnessAmount:string,
+ *   personalSelfPay:string, personalSelfExpense:string,
+ *   paymentSum:string, reconciled:boolean, items:Array
+ * }}
+ */
+export function extractMedicalInvoiceAmounts(ocrText) {
+  const lines = String(ocrText || '')
+    .split('\n')
+    .map(l => l.trim())
+    .filter(Boolean);
+
+  const g = (k) => pickMedicalAmount(lines, MEDICAL_AMOUNT_LABELS[k]);
+
+  const total = pickMedicalTotal(ocrText, lines);
+  const insurance = g('insurance');
+  const other = g('other');
+  const account = g('account');
+  const cash = g('cash');
+  const critical = g('critical');
+  const otherInsurance = g('otherInsurance');
+  const medicalAssistance = g('medicalAssistance');
+  const personalSelfPay = g('selfPay');
+  const personalSelfExpense = g('selfExpense');
+
+  const num = (v) => (v == null || isNaN(v) ? 0 : v);
+
+  // ---- 口径核对：总额 = 统筹 + 其他 + 个人账户 + 个人现金 ----
+  const sum4 = num(insurance) + num(other) + num(account) + num(cash);
+  const sum2 = num(insurance) + num(cash);
+  const EPS = 0.05;
+
+  let insuranceOut = num(insurance);
+  let otherOut = num(other);
+  let accountOut = num(account);
+  let cashOut = num(cash);
+  let reconciled = false;
+
+  if (total != null) {
+    const t = num(total);
+    if (Math.abs(sum4 - t) <= EPS) {
+      reconciled = true;                       // 四段合计与总额一致，直接采用
+    } else if (Math.abs(sum2 - t) <= EPS) {
+      // 只有「统筹 + 现金」守恒 → 其他支付/个人账户支付并非实际发生（避免虚增）
+      otherOut = 0;
+      accountOut = 0;
+      reconciled = true;
+    } else if (sum4 < t && t > 0) {
+      // 四段合计小于总额：把差额归入个人现金支付，保证总额自洽
+      cashOut = Number((t - insuranceOut - otherOut - accountOut).toFixed(2));
+      reconciled = true;
+    }
+  }
+  const paymentSum = insuranceOut + otherOut + accountOut + cashOut;
+
+  // 【修复】「自付」必须严格取「个人现金支付」，不可回退到「个人自付」。
+  // cash 显式为 0.00 是真实情况（该票现金支付为 0），回退会把「个人自付」重复计入现金，
+  // 导致 四段合计 > 总额（实测 2026101401：477.15+49.16+32.78+32.78=591.87 ≠ 559.09）。
+  const selfPayOut = cash != null ? num(cash) : 0;
+
+  return {
+    totalAmount: fmtAmt(total),
+    // 向后兼容：原「自付」即个人现金支付
+    selfPayAmount: cash != null ? fmtAmt(selfPayOut) : '',
+    insuranceAmount: insurance != null ? fmtAmt(insuranceOut) : '',
+    // 【新增】支付构成明细
+    otherPayment: other != null ? fmtAmt(otherOut) : '',
+    accountPayment: account != null ? fmtAmt(accountOut) : '',
+    // 其他支付的分项（三者通常恒等；按用户口径与「其他支付」并列展示，均不另计）
+    criticalIllnessAmount: critical != null ? fmtAmt(critical) : '',
+    otherInsuranceAmount: otherInsurance != null ? fmtAmt(otherInsurance) : '',
+    medicalAssistanceAmount: medicalAssistance != null ? fmtAmt(medicalAssistance) : '',
+    personalSelfPay: personalSelfPay != null ? fmtAmt(personalSelfPay) : '',
+    personalSelfExpense: personalSelfExpense != null ? fmtAmt(personalSelfExpense) : '',
+    paymentSum: total != null ? fmtAmt(paymentSum) : '',
+    reconciled,
+    items: []
+  };
+}
+
+/** 判断是否为医疗收费/医保票据（区别于增值税电子发票） */
+export function isMedicalInvoice(ocrText) {
+  return /医疗收费|财政电子票据|医保统筹基金支付|个人账户支付|个人现金支付|医保统筹支付/.test(String(ocrText || ''));
+}
+
+/** 明细行应排除的关键词（这些行的金额是汇总/支付字段，不是收费项目） */
+const MEDICAL_ITEM_EXCLUDE =
+  /合计|总计|小计|金额|余额|支付|自付|自费|自负|报销|备注|大写|小写|账户|保险|统筹|附加基金|分类|票据|交款|医保|日期|编号|数量|单位|项目名称|校验码|流水号/;
+
+/** 已知收费项目类别（用于提高识别准确度） */
+const MEDICAL_ITEM_CATEGORY =
+  /^(床位费|诊察费|检查费|化验费|治疗费|手术费|护理费|西药费|中药费|中成药|其他住院费|材料费|输血费|氧气费|放射费|放疗费|理疗费|超声费|药费|挂号费|急诊费|卫生材料费|其他费用|中草药费|麻醉费|病理费|CT费|MRI费|西成药费)$/;
+
+/**
+ * 提取医疗票据的收费明细（项目名称 + 金额）。
+ * 样本中明细与支付字段可能相邻，故先定位「明细区」再提取，避免把支付金额当项目。
+ */
+export function extractMedicalItems(ocrText) {
+  const items = [];
+  const lines = String(ocrText || '').split('\n').map(l => l.trim()).filter(Boolean);
+
+  // 明细区：从「项目名称」开始，到「金额合计」/「医疗收费明细」结束
+  let start = lines.findIndex(l => /项目名称/.test(l));
+  if (start === -1) start = 0;
+  let end = lines.findIndex((l, i) => i > start && /金额合计|合计\s*[（(]|医保统筹基金支付|业务流水号/.test(l));
+  if (end === -1) end = lines.length;
+  const region = lines.slice(start + 1, end);
+
+  const seen = new Set();
+  region.forEach(line => {
+    // 形如「检查费 515.00」「西药费 398.13」
+    const m = line.match(/^([\u4e00-\u9fa5A-Za-z（）()%\[\]\-]{2,20}?)\s*([\d,，]+\.\d{2})\s*$/);
+    if (!m) return;
+    const name = m[1].trim();
+    if (MEDICAL_ITEM_EXCLUDE.test(name)) return;
+    if (!MEDICAL_ITEM_CATEGORY.test(name) && !/费$|药$/.test(name)) return;
+    const amount = parseFloat(m[2].replace(/[,，]/g, ''));
+    if (isNaN(amount) || amount <= 0) return;
+    const key = `${name}|${amount}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    items.push({ name, amount: amount.toFixed(2) });
+  });
+
+  return { items };
+}
+
 export function extractElectronicInvoice(ocrText) {
+  // 【修复】医疗收费票据优先走专用解析，避免落入下方「单行格式」分支
+  if (isMedicalInvoice(ocrText)) {
+    return extractMedicalInvoiceAmounts(ocrText);
+  }
   const lines = ocrText.split('\n').map(l => l.trim()).filter(Boolean);
   let totalAmount = '';
   let insuranceAmount = '';
@@ -215,6 +454,13 @@ export function extractInvoiceAmounts(ocrText) {
   // "2, 826. 00" → "2,826.00", "960. 00" → "960.00"
   ocrText = ocrText.replace(/(\d),\s+(\d)/g, '$1,$2');
   ocrText = ocrText.replace(/(\d)\.\s+(\d)/g, '$1.$2');
+
+  // 【修复】医疗收费/医保票据优先走专用解析（能识别 统筹/其他支付/个人账户/大病保险）
+  if (isMedicalInvoice(ocrText)) {
+    console.log('[OCR] 检测到医疗收费（医保）票据格式');
+    const r = extractMedicalInvoiceAmounts(ocrText);
+    return { ...r, ...extractMedicalItems(ocrText) };
+  }
 
   // 检测是否为电子发票（增值税发票）
   const isElectronicInvoice = /电子发票|普用发票|专用发票|增值税发票|国家税务总局|税率|税额|价税合计/.test(ocrText);

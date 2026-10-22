@@ -208,6 +208,11 @@ __marimo__/
 
 # ===== 项目专属 =====
 
+# 开发日志：含生产 IP、域名、Redis 口令、OSS AccessKey、SSH 账号等运维细节，
+# 仅供本地/内部追溯，**严禁提交到公开仓库**。对外变更记录见 CHANGELOG.md。
+DEVELOPMENT_LOG.md
+CLAUDE.md
+
 # Node.js 依赖
 node_modules/
 npm-debug.log*

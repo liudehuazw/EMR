@@ -7,7 +7,7 @@
 #  需要 OCR（图片/PDF 文字识别）时（镜像较大，建议宿主机空闲内存 ≥ 2GB）：
 #      docker compose --profile ocr up -d
 #
-#  访问地址：http://localhost:8088     默认账号 admin / admin
+#  访问地址：http://localhost:8088     默认账号 admin（密码首次部署后自行生成并写入）
 #
 #  可选：复制根目录 .env.example 为 .env；默认本地存储，无需 OSS 即可上传。
 #        OCR 需 --profile ocr；AI 需在系统设置中配置。OSS 为可选增强。
