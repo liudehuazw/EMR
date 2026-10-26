@@ -112,15 +112,53 @@
                 @update:model-value="(val) => onCommercialAmountChange(inv, val)"
               />
               <el-button size="small" type="success" @click="saveCommercialReimbursement(inv)">保存</el-button>
+              <el-button
+                size="small"
+                type="warning"
+                class="commercial-all-btn"
+                title="将本票「个人账户支付 + 个人现金支付」全部填入商保报销并立即保存"
+                @click="reimburseAllByCommercial(inv)"
+              >已全部由商保报销</el-button>
             </div>
             <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
               <span style="font-size:16px; font-weight:700; color:#d03050;">¥{{ inv.totalAmount || '0.00' }}</span>
               <span v-if="inv.selfPayAmount" style="font-size:12px; color:#e67e22; background:#fff3e0; padding:1px 6px; border-radius:8px;">自付¥{{ inv.selfPayAmount }}</span>
               <span v-if="inv.insuranceAmount" style="font-size:12px; color:#1976d2; background:#e3f2fd; padding:1px 6px; border-radius:8px;">医保¥{{ inv.insuranceAmount }}</span>
+              <span v-if="inv.otherPayment && parseFloat(inv.otherPayment) > 0" style="font-size:12px; color:#7b1fa2; background:#f3e5f5; padding:1px 6px; border-radius:8px;">其他支付¥{{ inv.otherPayment }}</span>
+              <span v-if="inv.accountPayment && parseFloat(inv.accountPayment) > 0" style="font-size:12px; color:#00695c; background:#e0f2f1; padding:1px 6px; border-radius:8px;">个人账户¥{{ inv.accountPayment }}</span>
               <el-button size="small" type="primary" @click="previewInvoice(inv)">🔍 预览</el-button>
               <el-button size="small" type="success" @click="downloadInvoice(inv)">📥 下载</el-button>
               <el-button size="small" type="warning" @click="reparseInvoice(inv)">🔄 重新解析</el-button>
               <el-button size="small" @click="deleteInvoice(inv.id)">🗑️</el-button>
+            </div>
+
+            <!-- 支付构成明细（医保票据）：总额 = 统筹 + 其他支付 + 个人账户 + 个人现金 -->
+            <div
+              v-if="inv.insuranceAmount || inv.otherPayment || inv.accountPayment || inv.criticalIllnessAmount"
+              style="margin:8px 16px 0; padding:8px 10px; background:#f7f9fc; border:1px solid #e8eef6; border-radius:6px; font-size:12px; color:#455;"
+            >
+              <div style="font-weight:600; margin-bottom:4px; color:#37474f;">支付构成</div>
+              <div style="display:flex; flex-wrap:wrap; gap:6px 16px; align-items:baseline;">
+                <span>医保统筹基金支付：<b style="color:#1976d2;">¥{{ inv.insuranceAmount || '0.00' }}</b></span>
+                <span>
+                  其他支付：<b style="color:#7b1fa2;">¥{{ inv.otherPayment || '0.00' }}</b>
+                  <span v-if="hasOtherSubItems(inv)" style="font-size:11px; color:#90a4ae;">
+                    （含大病保险 ¥{{ inv.criticalIllnessAmount || '0.00' }}<template v-if="numOr(inv.otherInsuranceAmount) > 0"> · 其他保险 ¥{{ inv.otherInsuranceAmount }}</template><template v-if="numOr(inv.medicalAssistanceAmount) > 0"> · 医疗救助 ¥{{ inv.medicalAssistanceAmount }}</template>，分项不另计）
+                  </span>
+                </span>
+                <span>个人账户支付：<b style="color:#00695c;">¥{{ inv.accountPayment || '0.00' }}</b></span>
+                <span>个人现金支付：<b style="color:#e67e22;">¥{{ inv.selfPayAmount || '0.00' }}</b></span>
+              </div>
+              <div style="margin-top:4px; color:#78909c;">
+                <span v-if="inv.personalSelfPay">个人自付 ¥{{ inv.personalSelfPay }}</span>
+                <span v-if="inv.personalSelfExpense"> · 个人自费 ¥{{ inv.personalSelfExpense }}</span>
+              </div>
+              <div
+                v-if="!paymentReconciled(inv)"
+                style="margin-top:4px; color:#e6a23c; font-weight:600;"
+              >
+                ⚠️ 支付构成合计 ¥{{ paymentSumOf(inv) }} 与发票总额 ¥{{ inv.totalAmount }} 不一致，请核对
+              </div>
             </div>
           </div>
 
@@ -159,7 +197,7 @@
         <img v-else :src="previewUrl" style="max-width:100%; max-height:70vh; object-fit:contain; border-radius:8px;" />
       </div>
       <template #footer>
-        <el-button @click="window.open(previewUrl, '_blank')">↗ 新窗口打开</el-button>
+        <el-button @click="window.open(resolvePreviewUrl(previewRawUrl), '_blank')">↗ 新窗口打开</el-button>
         <el-button @click="previewVisible = false">关闭</el-button>
       </template>
     </el-dialog>
@@ -201,6 +239,7 @@ import DateRangePicker from '@/components/common/DateRangePicker.vue';
 import YearPicker from '@/components/common/YearPicker.vue';
 import { usePatientScope } from '@/stores/usePatientScope';
 import FilePreviewDialog from '@/components/FilePreviewDialog.vue';
+import { resolvePreviewUrl, loadPreviewDisplayUrl } from '@/utils/filePreview';
 
 const router = useRouter();
 const patientsStore = usePatientsStore();
@@ -228,7 +267,9 @@ const { duplicateMap, duplicateCount } = useInvoiceDuplicates(filteredInvoices);
 const { anomalyCount } = useInvoiceAnomalyCount(filteredInvoices);
 const previewVisible = ref(false);
 const previewUrl = ref('');
+const previewRawUrl = ref('');
 const previewIsPdf = ref(false);
+let previewRevoke = null;
 
 /** Draft edits for commercial reimbursement before clicking Save */
 const commercialDrafts = reactive({});
@@ -256,12 +297,70 @@ function onCommercialAmountChange(inv, value) {
   getCommercialDraft(inv).amount = value == null ? '' : String(value);
 }
 
-function getInvoiceSelfPayCap(inv) {
-  const selfPay = parseFloat(inv.selfPayAmount);
-  if (!Number.isNaN(selfPay) && selfPay > 0) return selfPay;
-  const total = parseFloat(inv.totalAmount);
-  if (!Number.isNaN(total) && total > 0) return total;
+/**
+ * 商保报销基数 = 个人账户支付 + 个人现金支付。
+ * 二者均为患者自有费用（个人账户是医保卡内的个人余额，同样可申请商业保险报销）。
+ *
+ * 取值策略：
+ * 1. 两个字段都有值 → 直接相加（语义最准，不受发票对账异常影响）
+ * 2. 有字段缺失（老数据）但存在支付构成 → 按「总额 − 医保统筹 − 其他支付」反推（等价于 账户+现金）
+ * 3. 毫无支付构成（全自费票）→ 退回发票总额
+ */
+function getInvoiceReimbursableBase(inv) {
+  const n = (v) => { const x = parseFloat(v); return Number.isNaN(x) ? 0 : x; };
+  const has = (v) => v !== '' && v != null;
+
+  const account = n(inv.accountPayment);
+  const cash = n(inv.selfPayAmount);
+
+  // 1. 字段完整 → 直接相加
+  if (has(inv.accountPayment) && has(inv.selfPayAmount)) {
+    return Number((account + cash).toFixed(2));
+  }
+
+  // 2. 字段缺失但有支付构成 → 反推 总额 − 统筹 − 其他（= 账户 + 现金）
+  const total = n(inv.totalAmount);
+  const hasBreakdown = [inv.insuranceAmount, inv.otherPayment, inv.accountPayment, inv.selfPayAmount]
+    .some(has);
+  if (hasBreakdown && total > 0) {
+    const derived = total - n(inv.insuranceAmount) - n(inv.otherPayment);
+    if (derived > 0) return Number(derived.toFixed(2));
+    return Number((account + cash).toFixed(2));
+  }
+
+  // 3. 全自费票
+  if (total > 0) return total;
   return 0;
+}
+
+/** 支付构成合计：医保统筹 + 其他支付 + 个人账户 + 个人现金 */
+function paymentSumOf(inv) {
+  const n = (v) => { const x = parseFloat(v); return Number.isNaN(x) ? 0 : x; };
+  return (n(inv.insuranceAmount) + n(inv.otherPayment) + n(inv.accountPayment) + n(inv.selfPayAmount)).toFixed(2);
+}
+
+/** 数字转换（保留两位以外不做格式化，仅用于判断） */
+function numOr(v) {
+  const x = parseFloat(v);
+  return Number.isNaN(x) ? 0 : x;
+}
+
+/** 是否存在「其他支付」的分项可展示（大病保险 / 其他保险 / 医疗救助） */
+function hasOtherSubItems(inv) {
+  return numOr(inv.criticalIllnessAmount) > 0
+    || numOr(inv.otherInsuranceAmount) > 0
+    || numOr(inv.medicalAssistanceAmount) > 0;
+}
+
+/** 支付构成是否与发票总额对账一致（差额 ≤ 0.05 视为一致） */
+function paymentReconciled(inv) {
+  const total = parseFloat(inv.totalAmount);
+  if (Number.isNaN(total) || total <= 0) return true;
+  // 四段支付全为空时（老数据/未解析）不做提示
+  const hasAny = [inv.insuranceAmount, inv.otherPayment, inv.accountPayment, inv.selfPayAmount]
+    .some(v => v !== '' && v != null);
+  if (!hasAny) return true;
+  return Math.abs(parseFloat(paymentSumOf(inv)) - total) <= 0.05;
 }
 
 function saveCommercialReimbursement(inv) {
@@ -281,23 +380,42 @@ function saveCommercialReimbursement(inv) {
     ElMessage.warning('请输入有效的商保报销金额（≥0）');
     return;
   }
-  const cap = getInvoiceSelfPayCap(inv);
-  if (cap > 0 && amount > cap) {
-    ElMessage.warning(`商保报销金额不能超过该票自付上限 ¥${cap.toFixed(2)}`);
-    return;
+  // 不再按「自付上限」硬性拦截：个人账户支付同为患者自有费用，实际报销额可能高于个人现金支付。
+  // 若超过参考基数，仅记录日志便于追溯，不阻断保存。
+  const base = getInvoiceReimbursableBase(inv);
+  if (base > 0 && amount > base + 0.05) {
+    console.warn(`[商保报销] 金额 ¥${amount.toFixed(2)} 超过参考基数 ¥${base.toFixed(2)}（个人账户+个人现金），已放行`);
   }
-  if (cap === 0 && amount > 0) {
-    ElMessage.warning('该发票无自付/总金额，无法填写商保报销');
-    return;
-  }
+  applyCommercialReimbursement(inv, amount);
+  ElMessage.success('商保报销已保存');
+}
+
+/** 写入商保报销结果（金额合法性由调用方负责校验） */
+function applyCommercialReimbursement(inv, amount) {
   const amountText = amount.toFixed(2);
   invoiceStore.updateInvoice({
     ...inv,
     commercialReimbursed: true,
     commercialAmount: amountText
   });
-  draft.amount = amountText;
-  ElMessage.success('商保报销已保存');
+  getCommercialDraft(inv).amount = amountText;
+}
+
+/**
+ * 「已全部由商保报销」：一键把本票可报销金额填满商保报销并立即保存。
+ * 金额 = 个人账户支付 + 个人现金支付（二者均为患者自有费用）。
+ * 金额直接由基数推导，故不再走校验，避免浮点四舍五入被误判。
+ */
+function reimburseAllByCommercial(inv) {
+  const base = getInvoiceReimbursableBase(inv);
+  if (!(base > 0)) {
+    ElMessage.warning('该发票无个人账户/现金支付，无可报销金额');
+    return;
+  }
+  const amount = Math.round(base * 100) / 100;
+  getCommercialDraft(inv).checked = true;
+  applyCommercialReimbursement(inv, amount);
+  ElMessage.success(`已按 个人账户+个人现金 ¥${amount.toFixed(2)} 全部由商保报销并保存`);
 }
 
 const totalAmount = computed(() =>
@@ -354,8 +472,16 @@ const triggerUpload = () => {
         const ocrResult = await processOcrFile(file);
         console.log(`发票OCR结果 [${i + 1}/${totalFiles}] [${file.name}]:`, ocrResult.text);
         
-        const { totalAmount, selfPayAmount, insuranceAmount, items } = extractInvoiceAmounts(ocrResult.text || '');
-        console.log('[Invoice Upload] Step 5: Extracted amounts:', { totalAmount, selfPayAmount, insuranceAmount, items });
+        const {
+          totalAmount, selfPayAmount, insuranceAmount, items,
+          otherPayment, accountPayment, criticalIllnessAmount,
+          otherInsuranceAmount, medicalAssistanceAmount,
+          personalSelfPay, personalSelfExpense
+        } = extractInvoiceAmounts(ocrResult.text || '');
+        console.log('[Invoice Upload] Step 5: Extracted amounts:', {
+          totalAmount, selfPayAmount, insuranceAmount,
+          otherPayment, accountPayment, criticalIllnessAmount, items
+        });
         
         const invoiceDate = extractInvoiceDate(ocrResult.text || '', ocrResult.extractedDates || [], file.name);
         const invoiceNumber = extractInvoiceNumber(ocrResult.text || '');
@@ -370,6 +496,12 @@ const triggerUpload = () => {
           fileName: file.name, fileType: file.type, fileUrl,
           totalAmount: parseFloat(totalAmount || 0).toFixed(2),
           selfPayAmount: selfPayAmount || '', insuranceAmount: insuranceAmount || '',
+          // 支付构成明细（医保票据）
+          otherPayment: otherPayment || '', accountPayment: accountPayment || '',
+          criticalIllnessAmount: criticalIllnessAmount || '',
+          otherInsuranceAmount: otherInsuranceAmount || '',
+          medicalAssistanceAmount: medicalAssistanceAmount || '',
+          personalSelfPay: personalSelfPay || '', personalSelfExpense: personalSelfExpense || '',
           commercialReimbursed: false,
           commercialAmount: '0.00',
           items, ocrRawText: ocrResult.text, uploadTime: Date.now()
@@ -387,6 +519,13 @@ const triggerUpload = () => {
             totalAmount: newInvoice.totalAmount,
             selfPayAmount: newInvoice.selfPayAmount,
             insuranceAmount: newInvoice.insuranceAmount,
+            otherPayment: newInvoice.otherPayment || null,
+            accountPayment: newInvoice.accountPayment || null,
+            criticalIllnessAmount: newInvoice.criticalIllnessAmount || null,
+            otherInsuranceAmount: newInvoice.otherInsuranceAmount || null,
+            medicalAssistanceAmount: newInvoice.medicalAssistanceAmount || null,
+            personalSelfPay: newInvoice.personalSelfPay || null,
+            personalSelfExpense: newInvoice.personalSelfExpense || null,
             commercialReimbursed: 0,
             commercialAmount: 0,
             items: JSON.stringify(newInvoice.items), // 后端 items 是 JSON 字符串
@@ -443,7 +582,12 @@ const deleteInvoice = async (invoiceId) => {
 const reparseInvoice = async (invoice) => {
   if (!invoice.ocrRawText) { ElMessage.warning('无OCR原文，无法重新解析'); return; }
   console.log('=== 重新解析发票 ===', invoice.fileName);
-  const { totalAmount, selfPayAmount, insuranceAmount, items } = extractInvoiceAmounts(invoice.ocrRawText);
+  const {
+    totalAmount, selfPayAmount, insuranceAmount, items,
+    otherPayment, accountPayment, criticalIllnessAmount,
+    otherInsuranceAmount, medicalAssistanceAmount,
+    personalSelfPay, personalSelfExpense
+  } = extractInvoiceAmounts(invoice.ocrRawText);
   const newItems = Array.isArray(items) && items.length > 0 ? items : (Array.isArray(invoice.items) ? invoice.items : []);
   const finalTotal = totalAmount ? parseFloat(totalAmount).toFixed(2) : (invoice.totalAmount || '0.00');
   const finalSelfPay = selfPayAmount || invoice.selfPayAmount || '';
@@ -451,7 +595,18 @@ const reparseInvoice = async (invoice) => {
   // 重新提取发票号码并更新 title
   const invoiceNumber = extractInvoiceNumber(invoice.ocrRawText);
   const newTitle = invoiceNumber ? `发票-${invoiceNumber}` : invoice.title;
-  const updated = { ...invoice, totalAmount: finalTotal, selfPayAmount: finalSelfPay, insuranceAmount: finalInsurance, items: newItems, title: newTitle };
+  const updated = {
+    ...invoice,
+    totalAmount: finalTotal, selfPayAmount: finalSelfPay, insuranceAmount: finalInsurance,
+    otherPayment: otherPayment || invoice.otherPayment || '',
+    accountPayment: accountPayment || invoice.accountPayment || '',
+    criticalIllnessAmount: criticalIllnessAmount || invoice.criticalIllnessAmount || '',
+    otherInsuranceAmount: otherInsuranceAmount || invoice.otherInsuranceAmount || '',
+    medicalAssistanceAmount: medicalAssistanceAmount || invoice.medicalAssistanceAmount || '',
+    personalSelfPay: personalSelfPay || invoice.personalSelfPay || '',
+    personalSelfExpense: personalSelfExpense || invoice.personalSelfExpense || '',
+    items: newItems, title: newTitle
+  };
   invoiceStore.updateInvoice(updated);
   const msg = invoiceNumber
     ? `重新解析完成！识别到 ${newItems.length} 个费用项目，名称已更新为 ${newTitle}`
@@ -488,11 +643,22 @@ const batchDelete = async () => {
 };
 
 // ===== 预览/下载 =====
-const previewInvoice = (invoice) => {
+const previewInvoice = async (invoice) => {
   if (!invoice.fileUrl) { ElMessage.warning('该发票无文件链接'); return; }
-  previewUrl.value = invoice.fileUrl;
+  if (previewRevoke) {
+    previewRevoke();
+    previewRevoke = null;
+  }
   previewIsPdf.value = invoice.fileType === 'application/pdf' || invoice.fileName?.toLowerCase().endsWith('.pdf');
-  previewVisible.value = true;
+  previewRawUrl.value = invoice.fileUrl;
+  try {
+    const { url, revoke } = await loadPreviewDisplayUrl(invoice.fileUrl);
+    previewUrl.value = url;
+    previewRevoke = revoke;
+    previewVisible.value = true;
+  } catch (e) {
+    ElMessage.error(e.message || '预览加载失败');
+  }
 };
 
 const downloadInvoice = async (invoice) => {
@@ -752,5 +918,9 @@ const jumpToLinkedRecord = (patientId, invoiceDate) => {
 }
 .commercial-amount-input {
   width: 100px;
+}
+/* 「已全部由商保报销」：与保存按钮同排，窄屏下允许换行 */
+.commercial-all-btn {
+  white-space: nowrap;
 }
 </style>

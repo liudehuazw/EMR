@@ -9,9 +9,9 @@
 --  说明：
 --   - 仅新增列，不修改既有列，历史数据保持可用
 --   - 可重复执行（先查 information_schema 再 ALTER）
---   - 生产库名为 zhaowen，开源仓默认 emr_db；不写死库名，由命令指定目标库
+--   - 不写死库名，由命令按实际环境指定目标库
 --
---  用法：mysql -u root -p zhaowen < database/V8__invoice_payment_breakdown.sql
+--  用法：mysql -u root -p <你的库名> < database/V8__invoice_payment_breakdown.sql
 -- ============================================================
 
 DROP PROCEDURE IF EXISTS emr_add_column_if_absent;

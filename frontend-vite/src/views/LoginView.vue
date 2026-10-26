@@ -61,9 +61,9 @@
         </div>
       </div>
       <div class="brand-footer">
-        <span>© {{ new Date().getFullYear() }} 版权所有 赵文</span>
+        <span>© {{ new Date().getFullYear() }} EMR 开源项目</span>
         <span class="footer-divider">|</span>
-        <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">苏ICP备2025223659号</a>
+        <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">YOUR_ICP_LICENSE</a>
       </div>
     </div>
 
@@ -143,9 +143,9 @@
 
       <!-- 移动端备案信息 -->
       <div class="login-footer-mobile">
-        <span>© {{ new Date().getFullYear() }} 赵文</span>
+        <span>© {{ new Date().getFullYear() }} EMR 开源项目</span>
         <span class="footer-divider">|</span>
-        <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">苏ICP备2025223659号</a>
+        <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">YOUR_ICP_LICENSE</a>
       </div>
     </div>
 
@@ -743,6 +743,6 @@ const handleForgotPassword = () => {
 
 const handleContactAdmin = () => {
   // 联系管理员开通账户
-  alert('请联系管理员开通账户\n管理员：赵文');
+  alert('请联系管理员开通账户');
 };
 </script>

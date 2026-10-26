@@ -583,7 +583,7 @@ OCR识别发票文字
 | 医保统筹基金支付 | `insurance_amount` | 统筹基金 |
 | 其他支付 | `other_payment` | 含大病保险等 |
 | 个人账户支付 | `account_payment` | 医保个人账户 |
-| 个人现金支付 | `self_pay_amount` | 患者现金支出，商保报销上限 |
+| 个人现金支付 | `self_pay_amount` | 患者现金支出 |
 | 大病保险支付 | `critical_illness_amount` | 「其他支付」分项，**仅展示不参与合计** |
 | 其他保险支付 | `other_insurance_amount` | 「其他支付」分项，**仅展示不参与合计** |
 | 医疗救助支付 | `medical_assistance_amount` | 「其他支付」分项，**仅展示不参与合计** |
@@ -593,7 +593,7 @@ OCR识别发票文字
 
 - 四段合计与发票总额不一致时，前端给出对账告警
 - 大病保险**不可与总额重复相加**（样本中 `其他支付` 与 `大病保险支付` 数值完全相同）
-- 商保报销上限取「个人现金支付」；缺该值时按 `总额 − 统筹 − 其他 − 账户` 反推
+- 商保报销基数取「**个人账户支付 + 个人现金支付**」（二者均为患者自有费用）；缺该值时按 `总额 − 统筹 − 其他` 反推。保存时**不设硬性上限**，超出仅记日志
 
 详见 `DEVELOPMENT_LOG.md`「2026-10-21 — 发票解析器重构」与 `docs/commercial-insurance-requirements.md`。
 
@@ -825,4 +825,4 @@ ssh your_user@YOUR_SERVER_IP "sudo mysql -uroot -p'your_db_password' emr_db < /t
 ---
 
 *文档最后更新：2026年10月（发票支付构成解析重构）*
-*维护人：赵文*
+*维护人：EMR 开源项目*
