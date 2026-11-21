@@ -7,10 +7,12 @@
 --        让 "WHERE deleted=0 AND patient_id IN (...)" 走覆盖索引。
 --
 --  用法：mysql -u root -p emr_db < database/V7__perf_indexes.sql
+--        （开源仓默认 emr_db；本脚本不写死库名，
+--          由 mysql 命令指定目标库，避免 USE 到不存在的库而报错）
 --  可重复执行（先查 information_schema 再建，已存在则跳过）。
 -- ============================================================
 
-USE emr_db;
+-- 注意：此处不使用 USE，目标库由执行时的 `mysql <dbname> < file` 指定。
 
 -- 通用：按 表名/索引名 判断是否存在，不存在才执行传入的 DDL
 DROP PROCEDURE IF EXISTS emr_add_index_if_absent;

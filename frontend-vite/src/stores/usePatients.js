@@ -17,6 +17,7 @@ export const usePatientsStore = defineStore('patients', () => {
   };
   _load();
 
+  // Only keep real URLs (http/https), filter out base64 data URLs
   const _extractUrl = (val) => (val && val.startsWith('http') ? val : '');
 
   const save = () => {
@@ -76,6 +77,7 @@ export const usePatientsStore = defineStore('patients', () => {
     if (idx !== -1) { patients.splice(idx, 1, { ...updatedPatient }); save(); }
     if (!authStore.isDemoMode) {
       try {
+        // Only send backend-expected fields (PatientForm DTO)
         const payload = {
           name: updatedPatient.name, gender: updatedPatient.gender,
           birthDate: updatedPatient.birthDate, phone: updatedPatient.phone,

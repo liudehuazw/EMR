@@ -5,6 +5,8 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -19,6 +21,11 @@ import java.io.IOException;
 
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
+
+    // 注意：父类 OncePerRequestFilter 自带的是 commons-logging 的 `logger`（Log），
+    // 它只有 warn(Object) / warn(Object, Throwable) 重载，不支持 "{}" 占位符。
+    // 这里显式使用 slf4j，与项目其它类保持一致，避免把参数误当 Throwable 而编译失败。
+    private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
 
     @Autowired
     private JwtUtil jwtUtil;
@@ -42,7 +49,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 username = claims.getSubject();
                 userId = JwtUtil.extractUserId(claims);
             } catch (Exception e) {
-                logger.warn("JWT 解析失败: {}", e.getMessage());
+                log.warn("JWT 解析失败: {}", e.getMessage());
             }
         }
 

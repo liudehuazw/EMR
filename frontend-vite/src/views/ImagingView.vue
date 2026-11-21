@@ -183,7 +183,7 @@ import { processOcrFile } from '@/api/ocr';
 import { analyzeWithAi } from '@/api/ai';
 import { createImagingReport, deleteImagingReport } from '@/api/imaging-reports';
 import { formatDate } from '@/utils/index';
-import { resolvePreviewUrl } from '@/utils/filePreview';
+import { usePreviewDisplayUrl } from '@/composables/usePreviewDisplayUrl';
 import OcrTextDialog from '@/components/common/OcrTextDialog.vue';
 
 const route = useRoute();
@@ -225,7 +225,8 @@ const filteredReports = computed(() => {
   return list;
 });
 const selectedReport = computed(() => selectedReportId.value ? imagingStore.getReportById(selectedReportId.value) : null);
-const reportPreviewUrl = computed(() => resolvePreviewUrl(selectedReport.value?.fileUrl || ''));
+const reportFileUrl = computed(() => selectedReport.value?.fileUrl || '');
+const { previewSrc: reportPreviewUrl } = usePreviewDisplayUrl(reportFileUrl);
 
 const isImage = (r) => r.fileType?.startsWith('image/');
 const isPdf = (r) => r.fileType === 'application/pdf' || r.fileName?.toLowerCase().endsWith('.pdf');
@@ -535,10 +536,12 @@ const triggerAiAnalysis = async () => {
       title: selectedReport.value.title || '',
       patientName: patient?.name || '未知'
     });
-    if (res.code === 200 && res.data) { aiResult.value = res.data; }
-    else throw new Error(res.message || 'AI分析失败');
+    if (res.code === 200 && res.data != null && String(res.data).trim()) {
+      aiResult.value = res.data;
+    } else throw new Error(res.message || 'AI 返回结果为空');
   } catch (err) {
     aiError.value = '分析失败: ' + err.message;
+    ElMessage.error(aiError.value);
   } finally {
     aiLoading.value = false;
   }

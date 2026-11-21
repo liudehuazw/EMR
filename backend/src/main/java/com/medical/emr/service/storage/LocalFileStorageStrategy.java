@@ -17,10 +17,14 @@ public class LocalFileStorageStrategy implements FileStorageStrategy {
 
     private final Path uploadRoot;
 
-    public LocalFileStorageStrategy(@Value("${file.upload-path:./uploads/}") String uploadPath) {
-        this.uploadRoot = Paths.get(uploadPath).toAbsolutePath().normalize();
+    public LocalFileStorageStrategy(@Value("${file.upload-path:}") String uploadPath) {
+        String effective = (uploadPath == null || uploadPath.isBlank())
+                ? "./uploads/"
+                : uploadPath.trim();
+        this.uploadRoot = Paths.get(effective).toAbsolutePath().normalize();
         try {
             Files.createDirectories(this.uploadRoot);
+            log.info("本地文件存储根目录: {}", this.uploadRoot);
         } catch (IOException e) {
             throw new IllegalStateException("无法创建本地上传目录: " + this.uploadRoot, e);
         }
@@ -45,7 +49,7 @@ public class LocalFileStorageStrategy implements FileStorageStrategy {
             Path targetFile = targetDir.resolve(newFilename);
             Files.copy(file.getInputStream(), targetFile, StandardCopyOption.REPLACE_EXISTING);
             String fileUrl = FileStorageSupport.LOCAL_PREVIEW_PREFIX + folder + "/" + newFilename;
-            log.info("本地文件上传成功: {} -> {}", originalFilename, fileUrl);
+            log.info("本地文件上传成功: {} -> {} (磁盘: {})", originalFilename, fileUrl, targetFile.toAbsolutePath());
             return fileUrl;
         } catch (IOException e) {
             log.error("本地文件上传失败: {}", originalFilename, e);

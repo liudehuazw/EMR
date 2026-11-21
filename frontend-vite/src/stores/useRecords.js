@@ -171,6 +171,7 @@ export const useRecordsStore = defineStore('records', () => {
     if (authStore.isDemoMode || !record.backendId) return;
 
     const payload = buildRecordPayload(record);
+    // 本地已保存，后台异步同步，避免 Redis/网络慢导致保存按钮一直转圈
     updateMedicalRecord(record.backendId, payload)
       .then(() => console.log('[Records] Synced to backend (PUT):', record.backendId))
       .catch((e) => console.warn('[Records] Backend update failed:', e));

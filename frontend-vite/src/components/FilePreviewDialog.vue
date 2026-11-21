@@ -43,7 +43,7 @@
       <!-- 图片 -->
       <img
         v-if="isImage"
-        :src="currentFile?.url"
+        :src="displayPreviewUrl"
         :style="previewStyle"
         class="preview-img"
         draggable="false"
@@ -51,7 +51,7 @@
       <!-- PDF -->
       <iframe
         v-else-if="isPdf"
-        :src="pdfSrc"
+        :src="displayPreviewUrl"
         style="width:100%; height:100%; border:none;"
       />
       <!-- 无数据 -->
@@ -79,7 +79,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { formatDate } from '@/utils/index';
+import { usePreviewDisplayUrl } from '@/composables/usePreviewDisplayUrl';
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -100,9 +100,10 @@ const panPos = ref({ x: 0, y: 0 });
 const isPanning = ref(false);
 const panStart = ref({ x: 0, y: 0 });
 const previewAreaRef = ref(null);
-const pdfSrc = ref('');
 
 const currentFile = computed(() => props.files[currentIdx.value] || null);
+const currentFileUrl = computed(() => currentFile.value?.url || '');
+const { previewSrc: displayPreviewUrl } = usePreviewDisplayUrl(currentFileUrl);
 
 const isImage = computed(() =>
   currentFile.value?.type?.startsWith('image/') ||
@@ -127,30 +128,11 @@ const openAtIndex = (idx) => {
   currentIdx.value = idx;
   zoomLevel.value = 1;
   panPos.value = { x: 0, y: 0 };
-  loadPdfSrc();
-};
-
-const loadPdfSrc = () => {
-  if (!isPdf.value || !currentFile.value?.url) return;
-  if (currentFile.value.url.startsWith('data:')) {
-    try {
-      const parts = currentFile.value.url.split(',');
-      const mime = parts[0].match(/:(.*?);/)?.[1] || 'application/pdf';
-      const binaryStr = atob(parts[1]);
-      const bytes = new Uint8Array(binaryStr.length);
-      for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
-      const blob = new Blob([bytes], { type: mime });
-      pdfSrc.value = URL.createObjectURL(blob);
-    } catch (e) { pdfSrc.value = ''; }
-  } else {
-    pdfSrc.value = currentFile.value.url;
-  }
 };
 
 watch(currentIdx, () => {
   zoomLevel.value = 1;
   panPos.value = { x: 0, y: 0 };
-  loadPdfSrc();
 });
 
 watch(() => props.modelValue, (v) => { if (v) openAtIndex(0); });
@@ -238,7 +220,7 @@ const downloadCurrent = () => {
     .replace(/[\\/:*?"<>|]/g, '_');
 
   try {
-    let blobUrl = file.url;
+    let blobUrl = displayPreviewUrl.value || file.url;
     if (file.url.startsWith('data:')) {
       const parts = file.url.split(',');
       const mime = parts[0].match(/:(.*?);/)?.[1] || 'application/octet-stream';

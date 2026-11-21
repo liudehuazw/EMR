@@ -61,6 +61,7 @@ public class FileUploadController {
             }
             Path path = fileStorageService.resolveLocalPreviewPath(folder, filename);
             if (!fileStorageService.localFileExists(path)) {
+                log.warn("本地预览文件不存在: folder={}, filename={}, path={}", folder, filename, path.toAbsolutePath());
                 return ResponseEntity.notFound().build();
             }
             Resource resource = new FileSystemResource(path);

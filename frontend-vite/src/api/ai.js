@@ -3,11 +3,21 @@ import { useAuthStore } from '@/stores/useAuth';
 
 /**
  * @param {{ type: string, data: string, title?: string, patientName?: string }} payload
+ * @param {{ timeoutMs?: number }} [options]
  */
-export function analyzeWithAi(payload) {
+export function analyzeWithAi(payload, options = {}) {
+  const timeoutMs = options.timeoutMs ?? 130_000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   return apiRequest('/ai/analyze', {
     method: 'POST',
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
+    signal: controller.signal
+  }).finally(() => clearTimeout(timer)).catch((err) => {
+    if (err.name === 'AbortError') {
+      throw new Error('AI 分析超时，请检查系统设置中的 AI 配置或稍后重试');
+    }
+    throw err;
   });
 }
 

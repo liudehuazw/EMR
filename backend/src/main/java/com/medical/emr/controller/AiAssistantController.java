@@ -5,6 +5,7 @@ import com.medical.emr.dto.AiToolSource;
 import com.medical.emr.dto.ChatRequest;
 import com.medical.emr.service.AiAssistantService;
 import jakarta.servlet.http.HttpServletResponse;
+import com.medical.emr.utils.SecurityUtils;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -99,7 +100,7 @@ public class AiAssistantController {
         };
 
         try {
-            aiAssistantService.chat(request, sink);
+            aiAssistantService.chat(SecurityUtils.getCurrentUsername(), request, sink);
         } finally {
             writer.flush();
         }

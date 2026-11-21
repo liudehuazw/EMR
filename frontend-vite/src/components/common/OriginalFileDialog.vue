@@ -7,8 +7,8 @@
     @update:model-value="$emit('update:visible', $event)"
   >
     <div class="preview-wrap">
-      <iframe v-if="isPdf" :src="url" class="preview-iframe" />
-      <img v-else :src="url" class="preview-img" alt="" />
+      <iframe v-if="isPdf" :src="previewSrc" class="preview-iframe" />
+      <img v-else :src="previewSrc" class="preview-img" alt="" />
     </div>
     <template #footer>
       <el-button @click="openInNewTab">↗ 新窗口打开</el-button>
@@ -18,6 +18,10 @@
 </template>
 
 <script setup>
+import { computed } from 'vue';
+import { resolvePreviewUrl } from '@/utils/filePreview';
+import { usePreviewDisplayUrl } from '@/composables/usePreviewDisplayUrl';
+
 const props = defineProps({
   visible: { type: Boolean, default: false },
   url: { type: String, default: '' },
@@ -27,8 +31,11 @@ const props = defineProps({
 
 defineEmits(['update:visible']);
 
+const { previewSrc } = usePreviewDisplayUrl(() => props.url);
+
 function openInNewTab() {
-  if (props.url) window.open(props.url, '_blank');
+  const url = resolvePreviewUrl(props.url);
+  if (url) window.open(url, '_blank');
 }
 </script>
 

@@ -68,9 +68,9 @@
             </div>
             <div style="flex:1; display:flex; align-items:center; justify-content:center; padding:12px; overflow:auto;">
               <template v-if="currentFile?.url && currentFile.url !== '#'">
-                <img v-if="isImage(currentFile)" :src="currentFile.url"
+                <img v-if="isImage(currentFile)" :src="currentFilePreviewUrl"
                   style="max-width:100%; max-height:460px; object-fit:contain; border-radius:6px;" />
-                <iframe v-else-if="isPdf(currentFile)" :src="currentFile.url"
+                <iframe v-else-if="isPdf(currentFile)" :src="currentFilePreviewUrl"
                   style="width:100%; height:460px; border:none; border-radius:6px;" />
                 <div v-else style="text-align:center; color:#999;">
                   <div style="font-size:3rem; margin-bottom:12px;">📄</div>
@@ -140,7 +140,8 @@ import { formatDate } from '@/utils/index';
 import { usePatientScope } from '@/stores/usePatientScope';
 import { uploadFileToCloud } from '@/api/files';
 import { processOcrFile } from '@/api/ocr';
-import { deleteMedicalRecord } from '@/api/medical-records';
+import { resolvePreviewUrl } from '@/utils/filePreview';
+import { usePreviewDisplayUrl } from '@/composables/usePreviewDisplayUrl';
 
 const route = useRoute();
 const router = useRouter();
@@ -190,6 +191,8 @@ const selectRecord = (recordId) => {
 // ===== 文件预览 =====
 const currentFileIdx = ref(0);
 const currentFile = computed(() => selectedRecord.value?.files?.[currentFileIdx.value] || null);
+const currentFileUrl = computed(() => currentFile.value?.url || '');
+const { previewSrc: currentFilePreviewUrl } = usePreviewDisplayUrl(currentFileUrl);
 
 const isImage = (file) => file?.type?.startsWith('image/') || /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(file?.name || '');
 const isPdf = (file) => file?.type?.includes('pdf') || /\.pdf$/i.test(file?.name || '');
@@ -200,7 +203,8 @@ const downloadCurrent = () => {
   const ext = file.name?.includes('.') ? '.' + file.name.split('.').pop().toLowerCase() : '.bin';
   const safeName = `${activePatient.value?.name || '患者'}_${selectedRecord.value?.date || ''}${ext}`.replace(/[\\/:*?"<>|]/g, '_');
   const a = document.createElement('a');
-  a.href = file.url; a.download = safeName;
+  a.href = resolvePreviewUrl(file.url);
+  a.download = safeName;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   ElMessage.success(`正在下载: ${safeName}`);
 };

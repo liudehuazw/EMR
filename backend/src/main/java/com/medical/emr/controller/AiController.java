@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import com.medical.emr.utils.SecurityUtils;
 import jakarta.validation.Valid;
 
 /**
@@ -35,11 +36,15 @@ public class AiController {
         try {
             log.info("[AI] Analyze request: type={}, dataLength={}", request.getType(), request.getData().length());
 
+            String username = SecurityUtils.getCurrentUsername();
+            if (username == null || username.isBlank()) {
+                return ResponseEntity.status(401).body(ApiResponse.error("未登录或登录已过期"));
+            }
             String result;
             if ("lab".equalsIgnoreCase(request.getType())) {
-                result = aiService.analyzeLabReport(request.getData());
+                result = aiService.analyzeLabReport(username, request.getData());
             } else if ("imaging".equalsIgnoreCase(request.getType())) {
-                result = aiService.analyzeImagingReport(request.getData());
+                result = aiService.analyzeImagingReport(username, request.getData());
             } else {
                 return ResponseEntity.badRequest()
                         .body(ApiResponse.error("Unsupported report type: " + request.getType()));
@@ -53,8 +58,8 @@ public class AiController {
                     .body(ApiResponse.error("AI服务繁忙，请求频率过高，请 " + e.getRetryAfterSeconds() + " 秒后再试"));
         } catch (RuntimeException e) {
             log.error("[AI] Analysis failed: {}", e.getMessage());
-            return ResponseEntity.internalServerError()
-                    .body(ApiResponse.error("AI分析失败: " + e.getMessage()));
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error(e.getMessage()));
         } catch (Exception e) {
             log.error("[AI] Unexpected error: {}", e.getMessage(), e);
             return ResponseEntity.internalServerError()
@@ -72,7 +77,8 @@ public class AiController {
             log.info("[AI] Analyze by URL request: type={}, url={}, patient={}",
                     request.getType(), request.getFileUrl(), request.getPatientName());
 
-            String result = aiService.analyzeByUrl(request);
+            String username = SecurityUtils.getCurrentUsername();
+            String result = aiService.analyzeByUrl(username, request);
             return ResponseEntity.ok(ApiResponse.success("分析完成", result));
 
         } catch (RateLimitException e) {
@@ -81,8 +87,8 @@ public class AiController {
                     .body(ApiResponse.error("AI服务繁忙，请求频率过高，请 " + e.getRetryAfterSeconds() + " 秒后再试"));
         } catch (RuntimeException e) {
             log.error("[AI] Analysis by URL failed: {}", e.getMessage());
-            return ResponseEntity.internalServerError()
-                    .body(ApiResponse.error("AI分析失败: " + e.getMessage()));
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error(e.getMessage()));
         } catch (Exception e) {
             log.error("[AI] Unexpected error in URL analysis: {}", e.getMessage(), e);
             return ResponseEntity.internalServerError()

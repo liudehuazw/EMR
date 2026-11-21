@@ -199,7 +199,47 @@ const MEDICAL_ITEM_EXCLUDE =
 
 /** 已知收费项目类别（用于提高识别准确度） */
 const MEDICAL_ITEM_CATEGORY =
-  /^(床位费|诊察费|检查费|化验费|治疗费|手术费|护理费|西药费|中药费|中成药|其他住院费|材料费|输血费|氧气费|放射费|放疗费|理疗费|超声费|药费|挂号费|急诊费|卫生材料费|其他费用|中草药费|麻醉费|病理费|CT费|MRI费|西成药费)$/;
+  /^(床位费|诊察费|检查费|化验费|治疗费|手术费|护理费|西药费|中药费|中成药|其他住院费|材料费|输血费|氧气费|放射费|放疗费|理疗费|超声费|药费|挂号费|急诊费|卫生材料费|其他费用|中草药费|麻醉费|病理费|CT费|MRI费|西成药费|诊查费|其他费|医用材料费|医用材料)$/;
+
+/** 明细区结束：出现在明细块之后、支付汇总之前；勿用「医保统筹」等单独一行（易误截断明细） */
+const MEDICAL_ITEMS_REGION_END = /^(金额合计|合计\s*[（(［[]\s*小写|合计\s*[（(［[]|小写\s*[)）］\]]|[（(]\s*小写\s*[)）]|医疗收费明细汇总|收费项目汇总|项目费用汇总|支付构成|医保类型)/;
+
+/**
+ * 从行尾提取金额（¥123.45 或 123.45，忽略行内前置数字如数量）
+ */
+function tailAmountFromLine(line) {
+  const m = line.match(/[¥￥]?\s*([\d,，]+\.\d{2})\s*$/);
+  if (!m) return null;
+  const v = parseFloat(m[1].replace(/[,，]/g, ''));
+  return isNaN(v) || v <= 0 ? null : v;
+}
+
+/**
+ * 项目名称：去货币/冒号/多余空白，保留 2～24 字
+ */
+function normalizeMedicalItemName(raw) {
+  return String(raw || '')
+    .replace(/^[¥￥]\s*/, '')
+    .replace(/\s*[：:]\s*$/, '')
+    .trim();
+}
+
+function isPlausibleMedicalItemName(name) {
+  if (!name || name.length < 2 || name.length > 24) return false;
+  if (MEDICAL_ITEM_EXCLUDE.test(name)) return false;
+  if (MEDICAL_ITEM_CATEGORY.test(name)) return true;
+  if (/费$|药$/.test(name)) return true;
+  // 短名称如「卫生材料」「医用材料」
+  if (/材料|诊查|成药/.test(name) && name.length <= 8) return true;
+  return false;
+}
+
+function tryPushMedicalItem(items, seen, name, amount) {
+  const key = `${name}|${amount}`;
+  if (seen.has(key)) return;
+  seen.add(key);
+  items.push({ name, amount: amount.toFixed(2) });
+}
 
 /**
  * 提取医疗票据的收费明细（项目名称 + 金额）。
@@ -209,28 +249,76 @@ export function extractMedicalItems(ocrText) {
   const items = [];
   const lines = String(ocrText || '').split('\n').map(l => l.trim()).filter(Boolean);
 
-  // 明细区：从「项目名称」开始，到「金额合计」/「医疗收费明细」结束
-  let start = lines.findIndex(l => /项目名称/.test(l));
-  if (start === -1) start = 0;
-  let end = lines.findIndex((l, i) => i > start && /金额合计|合计\s*[（(]|医保统筹基金支付|业务流水号/.test(l));
+  // 明细区：从「项目名称/收费项目/项目明细」表头后开始，到「金额合计(小写)」或「支付构成」前结束
+  const headerIdx = lines.findIndex(l =>
+    /项目名称|收费项目|项目明细|收费明细|医疗收费项目|费用明细/.test(l)
+  );
+  let start = headerIdx >= 0 ? headerIdx : 0;
+  let end = lines.findIndex((l, i) => i > start && MEDICAL_ITEMS_REGION_END.test(l));
   if (end === -1) end = lines.length;
-  const region = lines.slice(start + 1, end);
+  let region = lines.slice(start + 1, end);
+
+  // 若无表头且未识别到任何行，可退化为全文扫描（仍依赖名称白名单与排除词）
+  if (headerIdx < 0 && region.length === lines.length - 1) {
+    region = lines;
+  }
 
   const seen = new Set();
-  region.forEach(line => {
-    // 形如「检查费 515.00」「西药费 398.13」
-    const m = line.match(/^([\u4e00-\u9fa5A-Za-z（）()%\[\]\-]{2,20}?)\s*([\d,，]+\.\d{2})\s*$/);
-    if (!m) return;
-    const name = m[1].trim();
-    if (MEDICAL_ITEM_EXCLUDE.test(name)) return;
-    if (!MEDICAL_ITEM_CATEGORY.test(name) && !/费$|药$/.test(name)) return;
-    const amount = parseFloat(m[2].replace(/[,，]/g, ''));
-    if (isNaN(amount) || amount <= 0) return;
-    const key = `${name}|${amount}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    items.push({ name, amount: amount.toFixed(2) });
-  });
+
+  const parseRegion = (rows) => {
+    rows.forEach((line, j) => {
+      // 跳过纯表头/单位行
+      if (/^(单位|规格|数量|序号|No\.?|编号)$/.test(line)) return;
+
+      // 形如「检查费 515.00」「治疗费：123.45」「西药费￥398.13」（整行一项）
+      const strict = line.match(
+        /^([\u4e00-\u9fa5A-Za-z（）()%\[\]\-·]{2,24}?)\s*[：:]?\s*[¥￥]?\s*([\d,，]+\.\d{2})\s*$/
+      );
+      if (strict) {
+        const name = normalizeMedicalItemName(strict[1]);
+        if (!isPlausibleMedicalItemName(name)) return;
+        const amount = parseFloat(strict[2].replace(/[,，]/g, ''));
+        if (isNaN(amount) || amount <= 0) return;
+        tryPushMedicalItem(items, seen, name, amount);
+        return;
+      }
+
+      // 名称与金额分行（OCR 常把金额单独拆到下一行）
+      const nameOnly = line.match(
+        /^([\u4e00-\u9fa5A-Za-z（）()%\[\]\-·]{2,24}?)\s*[：:]?\s*$/
+      );
+      if (nameOnly && isPlausibleMedicalItemName(normalizeMedicalItemName(nameOnly[1]))) {
+        for (let k = j + 1; k <= j + 3 && k < rows.length; k++) {
+          const next = rows[k].trim();
+          if (/[\u4e00-\u9fa5]{2,}/.test(next) && !/^\d/.test(next) && !tailAmountFromLine(next)) break;
+          const amt = tailAmountFromLine(next);
+          if (amt != null) {
+            tryPushMedicalItem(items, seen, normalizeMedicalItemName(nameOnly[1]), amt);
+            return;
+          }
+        }
+      }
+
+      // 宽松：行首为项目名，行末为金额（中间可有数量、单位等，取最后一处金额）
+      const loose = line.match(
+        /^([\u4e00-\u9fa5A-Za-z（）()%\[\]\-·][\u4e00-\u9fa5A-Za-z0-9（）()%\[\]\-·\s]{1,22}?)\s+[¥￥]?\s*([\d,，]+\.\d{2})\s*$/
+      );
+      if (loose) {
+        const name = normalizeMedicalItemName(loose[1].replace(/\s+/g, ''));
+        if (isPlausibleMedicalItemName(name)) {
+          const amount = parseFloat(loose[2].replace(/[,，]/g, ''));
+          if (!isNaN(amount) && amount > 0) tryPushMedicalItem(items, seen, name, amount);
+        }
+      }
+    });
+  };
+
+  parseRegion(region);
+
+  // 若仍为空，全文二次扫描（仅限明显「*类目* 金额」或已知费种+金额行）
+  if (items.length === 0) {
+    parseRegion(lines);
+  }
 
   return { items };
 }

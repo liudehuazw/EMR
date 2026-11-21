@@ -43,7 +43,8 @@ public class AiService {
                 + "重要提示：你的分析仅供参考，不构成医疗诊断建议。请在回复末尾加上免责声明。";
         String userPrompt = "请分析以下检验报告数据，根据参考范围自行判断各指标是否正常：\n\n" + reportData;
         LlmConfigDto config = userAiConfigService.getEffectiveConfig(username);
-        log.info("[AI] Analyze lab report, model={}", config.getModelId());
+        ensureLlmReady(config);
+        log.info("[AI] Analyze lab report, user={}, model={}, url={}", username, config.getModelId(), config.getApiUrl());
         return llmClient.chatCompletion(config, systemPrompt, userPrompt);
     }
 
@@ -57,7 +58,8 @@ public class AiService {
                 + "重要提示：你的分析仅供参考，不构成医疗诊断建议。请在回复末尾加上免责声明。";
         String userPrompt = "请分析以下影像报告内容：\n\n" + reportText;
         LlmConfigDto config = userAiConfigService.getEffectiveConfig(username);
-        log.info("[AI] Analyze imaging report, model={}", config.getModelId());
+        ensureLlmReady(config);
+        log.info("[AI] Analyze imaging report, user={}, model={}, url={}", username, config.getModelId(), config.getApiUrl());
         return llmClient.chatCompletion(config, systemPrompt, userPrompt);
     }
 
@@ -96,6 +98,7 @@ public class AiService {
                         + "报告日期: " + (request.getReportDate() != null ? request.getReportDate() : "未知") + "\n\n";
             }
             LlmConfigDto config = userAiConfigService.getEffectiveConfig(username);
+            ensureLlmReady(config);
             return llmClient.visionCompletion(config, systemPrompt, userPromptPrefix, base64Content);
         } catch (RateLimitException e) {
             throw e;
@@ -104,6 +107,21 @@ public class AiService {
         } catch (Exception e) {
             log.error("[AI] Failed to download or analyze file: {}", e.getMessage(), e);
             throw new RuntimeException("文件下载或分析失败: " + e.getMessage());
+        }
+    }
+
+    private void ensureLlmReady(LlmConfigDto config) {
+        if (config == null) {
+            throw new RuntimeException("AI 配置不可用");
+        }
+        if (config.getApiUrl() == null || config.getApiUrl().isBlank()) {
+            throw new RuntimeException("未配置 AI API 地址，请在 NavBar「系统设置 → AI 模型」中配置并保存");
+        }
+        boolean ollama = "ollama".equalsIgnoreCase(config.getProviderType())
+                || config.getApiUrl().contains("11434");
+        String key = config.getApiKey();
+        if (!ollama && (key == null || key.isBlank())) {
+            throw new RuntimeException("未配置 AI API Key，请在系统设置中填写 Key 并点击「在线验证」");
         }
     }
 }

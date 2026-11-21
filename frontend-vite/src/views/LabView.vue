@@ -513,10 +513,12 @@ const triggerAiAnalysis = async () => {
       title: selectedReport.value.testName || '',
       patientName: patient?.name || '未知'
     });
-    if (res.code === 200 && res.data) { aiResult.value = res.data; }
-    else throw new Error(res.message || 'AI分析失败');
+    if (res.code === 200 && res.data != null && String(res.data).trim()) {
+      aiResult.value = res.data;
+    } else throw new Error(res.message || 'AI 返回结果为空');
   } catch (err) {
     aiError.value = '分析失败: ' + err.message;
+    ElMessage.error(aiError.value);
   } finally {
     aiLoading.value = false;
   }
